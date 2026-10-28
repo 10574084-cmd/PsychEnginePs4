@@ -1,39 +1,33 @@
 # PsychEnginePs4
 
-Experimental project to investigate a native PlayStation 4 homebrew port of **Friday Night Funkin': Psych Engine**.
+Experimental project investigating a native PlayStation 4 homebrew port of **Friday Night Funkin': Psych Engine**.
 
-> **Status: platform-layer scaffold / not playable yet.** The repository still does not contain the actual Psych Engine source, a concrete PS4 runtime implementation, or a playable build. The Actions workflow creates a source snapshot and status report; it does **not** generate a working `.pkg`.
+> **Status: native bootstrap experiment — not the game yet.** The repository does not yet contain a playable port of Psych Engine. The Haxe/OpenFL/Lime gameplay runtime and its graphics, audio, input, chart and asset systems are not integrated into the native PS4 app.
 
-## Work added so far
+## Current progress
 
-- Added `source/ps4/psychengine_ps4_platform.hpp`, an initial backend contract for controller input, PCM audio, rendering, and file access.
-- Added `source/ps4/README.md` describing the integration order and current blockers.
-- Kept the experimental Actions workflow as a repository/source-snapshot check so its green status is not confused with a successful PS4 build.
+- `source/ps4/psychengine_ps4_platform.hpp` defines the planned input, audio, renderer and file backend interfaces.
+- `.github/workflows/ps4-build.yml` audits the official upstream engine and reports porting blockers.
+- `src/main.c` is a tiny native smoke-test entry point for checking the OpenOrbis build/package toolchain. It prints diagnostic messages and exits; it is **not playable gameplay**.
+- `Makefile` and `tools/make_gp4.py` provide an experimental OpenOrbis build and package path.
+- `.github/workflows/ps4-bootstrap.yml` attempts to compile and package the bootstrap. Its artifact is explicitly named `PsychEnginePs4-native-bootstrap-not-game`.
 
-The platform interfaces are only declarations. They are not connected to OpenOrbis APIs or to the game loop yet.
+## Artifacts
 
-## Why the Windows build is not enough
+Open **Actions → PsychEnginePs4 native bootstrap** and inspect the latest run. If the build succeeds, download the artifact named `PsychEnginePs4-native-bootstrap-not-game`. It contains a toolchain smoke-test package, not the finished game.
 
-The uploaded `PsychEngine-Windows32.zip` is a Windows build, not the engine's portable source tree, so it cannot by itself be converted into a native PS4 application.
+The audit workflow is separate: [PsychEngine PS4 (experimental)](.github/workflows/ps4-build.yml).
 
-Psych Engine is built around Haxe/OpenFL/Lime and related libraries. A genuine port requires the exact source version plus compatible graphics, audio, controller input, filesystem, and packaging layers.
+## Why this is not a full port yet
 
-## GitHub Actions
+Psych Engine is built around Haxe/OpenFL/Lime and related libraries. A real PS4 port needs a viable runtime strategy and working PS4-specific rendering, audio, controller, filesystem, asset/chart loading, and gameplay integration. The current native bootstrap only tests the packaging path and cannot run songs or mods.
 
-Open **Actions → PsychEngine PS4 (experimental)** to run the repository check. It uploads a source snapshot and status report. This is not an installable game package.
+## Milestones
 
-Workflow: [`.github/workflows/ps4-build.yml`](.github/workflows/ps4-build.yml)
+1. Verify that the OpenOrbis toolchain can produce a native executable and package in CI.
+2. Establish a visible PS4 rendering path and controller input.
+3. Decide how to adapt or replace the Haxe/OpenFL/Lime runtime.
+4. Integrate charts, songs, characters, stages, Lua/mod support and asset loading.
+5. Validate on compatible PS4 homebrew hardware before calling the port playable.
 
-## Next milestones
-
-1. Add the actual Psych Engine source tree and review its license and dependencies.
-2. Establish and validate a minimal native PS4 application build with a supported homebrew toolchain.
-3. Implement and test controller input and filesystem access.
-4. Choose a viable graphics/audio route and connect it to the engine.
-5. Integrate the gameplay loop, charts, assets, and mods.
-6. Add PKG generation only after a real executable and its runtime dependencies build successfully.
-7. Test on target hardware before claiming the game works.
-
-## Disclaimer
-
-This is an independent community project and is not affiliated with Sony or the original Psych Engine developers. A successful Actions run does not mean the game is playable on PS4.
+This is an independent community project and is not affiliated with Sony or the original Psych Engine developers. A green workflow only confirms the specific checks that it runs.
