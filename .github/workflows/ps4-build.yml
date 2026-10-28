@@ -1,0 +1,68 @@
+name: PsychEngine PS4 (experimental)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ps4-build.yml'
+      - 'README.md'
+      - 'source/**'
+      - 'assets/**'
+      - 'Project.xml'
+      - 'project.xml'
+      - 'Makefile'
+      - 'CMakeLists.txt'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect-and-package:
+    name: Check PS4 port sources
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Inspect repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Repository files:"
+          find . -maxdepth 3 -type f -not -path './.git/*' | sort | head -300
+          echo
+          echo "Checking for a native PS4/OpenOrbis project..."
+          if [ -f Makefile ] || [ -f CMakeLists.txt ] || [ -f source/main.cpp ] || [ -f src/main.cpp ]; then
+            echo "Native build entry point found."
+          else
+            echo "::warning::No native PS4 port/build entry point found yet. The current repository is a starter repository, not a buildable Psych Engine PS4 port."
+          fi
+          if [ -f Project.xml ] || [ -f project.xml ]; then
+            echo "Haxe/OpenFL project metadata found."
+          else
+            echo "No Haxe/OpenFL project metadata found."
+          fi
+
+      - name: Create source snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          git archive --format=zip --prefix=PsychEnginePs4/ HEAD -o dist/PsychEnginePs4-source.zip
+          cat > dist/BUILD-STATUS.txt <<'EOF'
+          PsychEnginePs4 build status
+          This workflow packages the repository source for inspection.
+          It does NOT produce a PS4 PKG or claim that Psych Engine runs on PS4.
+          A real port is still required: the repository needs the engine source,
+          PS4-compatible rendering/audio/input implementations, and OpenOrbis
+          build/package integration before a valid homebrew package can be built.
+          EOF
+
+      - name: Upload source snapshot and build status
+        uses: actions/upload-artifact@v4
+        with:
+          name: PsychEnginePs4-source-and-status
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
