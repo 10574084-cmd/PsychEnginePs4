@@ -22,7 +22,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          base='http://security.ubuntu.com/ubuntu/pool/main/o/openssl/'
+          base='https://security.ubuntu.com/ubuntu/pool/main/o/openssl/'
           ver="$(curl -fsSL "$base" | grep -oE 'libssl1\.1_1\.1\.1f-[0-9a-z.~+]+_amd64\.deb' | sed -E 's/^libssl1\.1_(.*)_amd64\.deb$/\1/' | sort -V | tail -1)"
           test -n "$ver"
           curl -fsSL "$base/libssl1.1_$ver"_amd64.deb -o /tmp/libssl1.1.deb
@@ -70,7 +70,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          make
+          clang_bin="$(find "$OO_PS4_TOOLCHAIN" -type f -name clang -print -quit)"
+          lld_bin="$(find "$OO_PS4_TOOLCHAIN" -type f -name ld.lld -print -quit)"
+          test -n "$clang_bin"
+          test -n "$lld_bin"
+          make CC="$clang_bin" LD="$lld_bin"
           test -s 'IV0000-PSYH00001_00-PSYCHENG00000000.pkg'
           test -s eboot.bin
           file eboot.bin 'IV0000-PSYH00001_00-PSYCHENG00000000.pkg' || true
