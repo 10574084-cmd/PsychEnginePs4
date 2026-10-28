@@ -2,34 +2,35 @@
 
 Experimental project investigating a native PlayStation 4 homebrew port of **Friday Night Funkin': Psych Engine**.
 
-> **Status: interactive native menu preview — not the full game yet.** The repository does not yet contain a playable port of Psych Engine. The Haxe/OpenFL/Lime gameplay runtime and its audio, chart, mod and asset systems are not integrated into the native PS4 app.
+> **Status: original-menu preview — not the full game yet.** The Haxe/OpenFL/Lime gameplay runtime and its audio, charts, mod support, and asset-loading systems are not integrated into this native PS4 application.
 
 ## Current progress
 
-- `source/ps4/psychengine_ps4_platform.hpp` defines the planned input, audio, renderer and file backend interfaces.
-- `.github/workflows/ps4-build.yml` audits the official upstream engine and reports porting blockers.
-- `src/main.cpp` uses OpenOrbis video output to render a native menu with **STORY MODE**, **FREEPLAY**, and **OPTIONS**.
-- D-pad Up/Down moves the selection; Cross opens the selected page; Circle returns to the main menu. The Options page lets the user switch the accent color with Left/Right.
-- Story Mode and Freeplay are honest placeholder pages explaining that songs and the gameplay runtime are not integrated yet.
-- The bootstrap Makefile links the OpenOrbis video and controller/user-service libraries.
-- `.github/workflows/ps4-bootstrap.yml` validates the generated 512×512 RGB icon, stages runtime modules, and builds the experimental PKG using OpenOrbis packaging tools.
+- `source/ps4/psychengine_ps4_platform.hpp` defines the planned input, audio, renderer, and file backend interfaces.
+- `.github/workflows/ps4-build.yml` audits the upstream engine and reports porting blockers.
+- `src/main.cpp` recreates the original Psych Engine 0.6.3 main-menu layout using the original `menuBG` background and the seven original menu button sprite atlases: Story Mode, Freeplay, Mods, Awards, Credits, Donate, and Options.
+- `tools/prepare_psych_menu.py` crops the original atlas frames and scales them for the PS4 renderer.
+- `tools/patch_openorbis_graphics.py` adds fast alpha-aware image blitting to the OpenOrbis sample renderer, so transparent button art overlays the background correctly.
+- D-pad Up/Down changes the selected item; Cross opens a placeholder page; Circle returns to the main menu.
+- The native bootstrap Makefile links the OpenOrbis video, controller, and user-service libraries.
+- `.github/workflows/ps4-bootstrap.yml` fetches the matching original 0.6.3 menu assets, validates the icon, bundles runtime modules, and builds the experimental PKG.
 
 ## Artifact
 
-Open **Actions → PsychEnginePs4 native bootstrap** and download `PsychEnginePs4-menu-preview-v0.2` from the latest successful run. It contains the PKG, ELF, generated icon, SFO metadata, and packaged runtime modules.
-
-The audit workflow is separate: [PsychEngine PS4 (experimental)](.github/workflows/ps4-build.yml).
+Open **Actions → PsychEnginePs4 native bootstrap** and download `PsychEnginePs4-original-menu-v0.2` from the latest successful run. It contains the PKG, ELF, generated icon, SFO metadata, packaged runtime modules, and the original menu assets.
 
 ## Current limitations
 
-The menu is a native proof of concept. **Songs, charts, gameplay, audio playback and mod support are not implemented.** A green CI build confirms the compile and packaging steps succeeded, but does not prove that the PKG launches on every physical PS4; device testing is still required.
+The main menu's look and button sprites are based on the original Psych Engine 0.6.3 assets, but this is a native recreation of the menu layout—not the original Haxe code running on PS4. Selecting Story Mode, Freeplay, Mods, Awards, Credits, Donate, or Options currently opens an explanatory placeholder. Songs, charts, gameplay, audio playback, and mod execution are **not implemented**.
+
+A green CI build confirms the compile and packaging steps succeeded. It does **not** prove that the PKG launches on a physical PS4; the new menu still needs to be tested on the console.
 
 ## Milestones
 
-1. Validate the interactive menu and controller navigation on compatible PS4 homebrew hardware.
-2. Improve the menu and add proper settings persistence.
+1. Validate original-menu rendering and controller navigation on compatible PS4 homebrew hardware.
+2. Port the submenu layouts and settings.
 3. Decide how to adapt or replace the Haxe/OpenFL/Lime runtime.
-4. Integrate charts, songs, characters, stages, Lua/mod support and asset loading.
-5. Validate the gameplay port before calling it playable.
+4. Integrate charts, songs, characters, stages, Lua/mod support, and asset loading.
+5. Validate gameplay on compatible PS4 homebrew hardware before calling the port playable.
 
-This is an independent community project and is not affiliated with Sony or the original Psych Engine developers.
+This is an independent community project and is not affiliated with Sony or the original Psych Engine developers. The menu assets are retrieved from the upstream Psych Engine 0.6.3 source tree during CI.
