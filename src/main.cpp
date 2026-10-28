@@ -2,17 +2,20 @@
 #include <stdio.h>
 #include <string.h>
 #include <sstream>
+#include <cmath>
 
 #include <orbis/Pad.h>
 #include <orbis/UserService.h>
 
 #include "graphics.h"
+#include "ps4png.h"
 
 std::stringstream debugLogStream;
 
 namespace {
-constexpr int kWidth = 1920;
-constexpr int kHeight = 1080;
+constexpr int kScreenWidth = 1920;
+constexpr int kScreenHeight = 1080;
+constexpr float kGameToScreen = 1.5f;
 
 struct Glyph {
     char ch;
@@ -46,14 +49,20 @@ static const Glyph kFont[] = {
     {'X',{0x11,0x11,0x0A,0x04,0x0A,0x11,0x11}},
     {'Y',{0x11,0x11,0x0A,0x04,0x04,0x04,0x04}},
     {'Z',{0x1F,0x01,0x02,0x04,0x08,0x10,0x1F}},
+    {'0',{0x0E,0x11,0x13,0x15,0x19,0x11,0x0E}},
+    {'1',{0x04,0x0C,0x04,0x04,0x04,0x04,0x0E}},
+    {'2',{0x0E,0x11,0x01,0x02,0x04,0x08,0x1F}},
+    {'3',{0x1E,0x01,0x01,0x0E,0x01,0x01,0x1E}},
+    {'4',{0x02,0x06,0x0A,0x12,0x1F,0x02,0x02}},
+    {'5',{0x1F,0x10,0x10,0x1E,0x01,0x01,0x1E}},
+    {'6',{0x0E,0x10,0x10,0x1E,0x11,0x11,0x0E}},
+    {'7',{0x1F,0x01,0x02,0x04,0x08,0x08,0x08}},
+    {'8',{0x0E,0x11,0x11,0x0E,0x11,0x11,0x0E}},
+    {'9',{0x0E,0x11,0x11,0x0F,0x01,0x01,0x0E}},
+    {'.',{0,0,0,0,0,0x0C,0x0C}},
+    {'-',{0,0,0,0x1F,0,0,0}},
+    {'\'',{0x0C,0x0C,0x08,0,0,0,0}},
     {' ',{0,0,0,0,0,0,0}}
-};
-
-enum class Page {
-    Main,
-    Story,
-    Freeplay,
-    Options
 };
 
 const Glyph *findGlyph(char ch) {
@@ -69,8 +78,7 @@ void drawText(Scene2D *scene, const char *text, int x, int y, int scale, Color c
         for (int row = 0; row < 7; ++row) {
             for (int col = 0; col < 5; ++col) {
                 if (glyph->rows[row] & (1u << (4 - col))) {
-                    scene->DrawRectangle(x + col * scale, y + row * scale,
-                                         scale, scale, color);
+                    scene->DrawRectangle(x + col * scale, y + row * scale, scale, scale, color);
                 }
             }
         }
@@ -79,108 +87,21 @@ void drawText(Scene2D *scene, const char *text, int x, int y, int scale, Color c
 }
 
 void drawCenteredText(Scene2D *scene, const char *text, int y, int scale, Color color) {
-    const int width = static_cast<int>(strlen(text)) * 6 * scale;
-    drawText(scene, text, (kWidth - width) / 2, y, scale, color);
+    const int textWidth = static_cast<int>(strlen(text)) * 6 * scale;
+    drawText(scene, text, (kScreenWidth - textWidth) / 2, y, scale, color);
 }
 
-void drawPanel(Scene2D *scene, int x, int y, int w, int h,
-               Color fill, Color border, int borderSize) {
+void drawPanel(Scene2D *scene, int x, int y, int w, int h, Color fill, Color edge, int border) {
     scene->DrawRectangle(x, y, w, h, fill);
-    scene->DrawRectangle(x, y, w, borderSize, border);
-    scene->DrawRectangle(x, y + h - borderSize, w, borderSize, border);
-    scene->DrawRectangle(x, y, borderSize, h, border);
-    scene->DrawRectangle(x + w - borderSize, y, borderSize, h, border);
+    scene->DrawRectangle(x, y, w, border, edge);
+    scene->DrawRectangle(x, y + h - border, w, border, edge);
+    scene->DrawRectangle(x, y, border, h, edge);
+    scene->DrawRectangle(x + w - border, y, border, h, edge);
 }
 
-void drawLogo(Scene2D *scene, Color accent, Color pale, Color background) {
-    Color shadow = {34, 38, 57};
-    scene->DrawRectangle(862, 76, 196, 196, accent);
-    scene->DrawRectangle(880, 94, 160, 160, shadow);
-    scene->DrawRectangle(898, 112, 124, 124, background);
-    drawText(scene, "P", 918, 130, 18, pale);
-    scene->DrawRectangle(910, 238, 100, 7, pale);
-}
-
-void drawBackButton(Scene2D *scene, Color accent, Color pale, Color panel) {
-    drawPanel(scene, 725, 810, 470, 78, panel, accent, 3);
-    drawCenteredText(scene, "O BACK TO MENU", 836, 4, pale);
-}
-
-void drawMainMenu(Scene2D *scene, int selected, bool controllerReady, bool blueTheme) {
-    const Color background = {13, 16, 31};
-    const Color pale = {244, 246, 250};
-    const Color muted = {164, 176, 199};
-    const Color panel = {25, 29, 46};
-    const Color accent = blueTheme ? Color{68, 190, 255} : Color{239, 45, 71};
-
-    scene->FrameBufferFill(background);
-    scene->DrawRectangle(0, 0, kWidth, 14, accent);
-    scene->DrawRectangle(0, kHeight - 14, kWidth, 14, accent);
-    scene->DrawRectangle(72, 180, 8, 660, accent);
-    scene->DrawRectangle(kWidth - 80, 180, 8, 660, accent);
-
-    drawLogo(scene, accent, pale, background);
-    drawCenteredText(scene, "PSYCH ENGINE", 304, 11, pale);
-    drawCenteredText(scene, "NATIVE PS4 MENU PREVIEW", 393, 4, muted);
-
-    const char *labels[] = {"STORY MODE", "FREEPLAY", "OPTIONS"};
-    for (int i = 0; i < 3; ++i) {
-        const int y = 475 + i * 116;
-        const bool active = i == selected;
-        const Color fill = active ? accent : panel;
-        const Color edge = active ? pale : accent;
-        const Color labelColor = active ? pale : muted;
-        drawPanel(scene, 490, y, 940, 86, fill, edge, active ? 4 : 2);
-        if (active) {
-            scene->DrawRectangle(520, y + 18, 7, 50, pale);
-            scene->DrawRectangle(1393, y + 18, 7, 50, pale);
-        }
-        drawCenteredText(scene, labels[i], y + 26, 6, labelColor);
-    }
-
-    drawCenteredText(scene, "UP DOWN MOVE   X SELECT", 884, 4, pale);
-    drawCenteredText(scene, controllerReady ? "DUALSHOCK INPUT READY" : "CONTROLLER NOT DETECTED",
-                     964, 3, controllerReady ? accent : muted);
-}
-
-void drawSubPage(Scene2D *scene, Page page, bool blueTheme) {
-    const Color background = {13, 16, 31};
-    const Color pale = {244, 246, 250};
-    const Color muted = {164, 176, 199};
-    const Color panel = {25, 29, 46};
-    const Color accent = blueTheme ? Color{68, 190, 255} : Color{239, 45, 71};
-
-    scene->FrameBufferFill(background);
-    scene->DrawRectangle(0, 0, kWidth, 14, accent);
-    scene->DrawRectangle(0, kHeight - 14, kWidth, 14, accent);
-    scene->DrawRectangle(72, 110, 8, 820, accent);
-    scene->DrawRectangle(kWidth - 80, 110, 8, 820, accent);
-
-    const char *title = page == Page::Story ? "STORY MODE" :
-                        page == Page::Freeplay ? "FREEPLAY" : "OPTIONS";
-    drawCenteredText(scene, title, 260, 11, pale);
-    scene->DrawRectangle(620, 365, 680, 4, accent);
-
-    if (page == Page::Story) {
-        drawCenteredText(scene, "NO SONGS INSTALLED", 485, 6, pale);
-        drawCenteredText(scene, "GAMEPLAY RUNTIME NOT PORTED", 584, 4, muted);
-        drawCenteredText(scene, "STORY MODE DATA IS NOT READY", 650, 4, muted);
-    } else if (page == Page::Freeplay) {
-        drawCenteredText(scene, "NO SONGS FOUND", 485, 6, pale);
-        drawCenteredText(scene, "AUDIO AND CHART LOADING NOT READY", 584, 4, muted);
-        drawCenteredText(scene, "THIS IS A NATIVE MENU PREVIEW", 650, 4, muted);
-    } else {
-        drawCenteredText(scene, "ACCENT COLOR", 465, 6, muted);
-        drawCenteredText(scene, blueTheme ? "BLUE" : "RED", 565, 9, accent);
-        drawCenteredText(scene, "LEFT RIGHT CHANGE COLOR", 690, 4, pale);
-    }
-
-    drawBackButton(scene, accent, pale, panel);
-}
-
-bool initController(int &padHandle) {
+bool initController(int &handle) {
     if (scePadInit() != 0) {
-        printf("scePadInit failed; menu will run without input.\n");
+        printf("scePadInit failed; the menu will still render without controller navigation.\n");
         return false;
     }
 
@@ -190,35 +111,151 @@ bool initController(int &padHandle) {
 
     int32_t userId = -1;
     if (sceUserServiceGetInitialUser(&userId) != 0 || userId < 0) {
-        printf("No logged-in user; menu will run without input.\n");
+        printf("No logged-in user; the menu will render without controller navigation.\n");
         return false;
     }
 
-    padHandle = scePadOpen(userId, ORBIS_PAD_PORT_TYPE_STANDARD, 0, nullptr);
-    if (padHandle < 0) {
-        printf("scePadOpen failed; menu will run without input.\n");
+    handle = scePadOpen(userId, ORBIS_PAD_PORT_TYPE_STANDARD, 0, nullptr);
+    if (handle < 0) {
+        printf("scePadOpen failed; the menu will render without controller navigation.\n");
         return false;
     }
+    printf("DualShock controller input initialized.\n");
     return true;
+}
+
+struct MenuOption {
+    const char *name;
+    Ps4Image *basic;
+    Ps4Image *selected;
+};
+
+enum class SubPage {
+    None,
+    Story,
+    Freeplay,
+    Mods,
+    Awards,
+    Credits,
+    Donate,
+    Options
+};
+
+void drawMainMenu(Scene2D *scene, Ps4Image &background, MenuOption *items,
+                  int itemCount, int selectedIndex) {
+    background.Draw(scene, 0, 0);
+
+    // Psych Engine 0.6.3's menu uses 140px spacing, a -132px base offset
+    // for seven entries, and tracks the selected sprite with a small vertical bias.
+    const int originalOffset = 108 - (itemCount > 4 ? (itemCount - 4) * 80 : 0);
+    const int selectedBaseY = static_cast<int>(std::lround(
+        (selectedIndex * 140 + originalOffset) * kGameToScreen));
+    Ps4Image *selectedImage = items[selectedIndex].selected;
+    const float targetCenterY = kScreenHeight * 0.5f +
+        (itemCount > 4 ? itemCount * 8 * kGameToScreen : 0.0f);
+    const float verticalShift = targetCenterY -
+        (selectedBaseY + selectedImage->height() * 0.5f);
+
+    for (int i = 0; i < itemCount; ++i) {
+        Ps4Image *image = (i == selectedIndex) ? items[i].selected : items[i].basic;
+        const int baseY = static_cast<int>(std::lround(
+            (i * 140 + originalOffset) * kGameToScreen));
+        const int x = (kScreenWidth - image->width()) / 2;
+        const int y = static_cast<int>(std::lround(baseY + verticalShift));
+        image->Draw(scene, x, y);
+    }
+
+    const Color white = {255, 255, 255};
+    const int footerScale = 2;
+    drawText(scene, "PSYCH ENGINE V0.6.2", 18, kScreenHeight - 66, footerScale, white);
+    drawText(scene, "FRIDAY NIGHT FUNKIN V0.2", 18, kScreenHeight - 38, footerScale, white);
+}
+
+void drawPlaceholder(Scene2D *scene, Ps4Image &background, SubPage page) {
+    background.Draw(scene, 0, 0);
+    const Color panel = {22, 20, 32};
+    const Color accent = {239, 45, 71};
+    const Color white = {255, 255, 255};
+    const Color muted = {225, 225, 225};
+    const int boxX = 240;
+    const int boxY = 340;
+    const int boxW = 1440;
+    const int boxH = 360;
+    drawPanel(scene, boxX, boxY, boxW, boxH, panel, accent, 5);
+
+    const char *title = "NOT PORTED YET";
+    if (page == SubPage::Story) title = "STORY MODE";
+    else if (page == SubPage::Freeplay) title = "FREEPLAY";
+    else if (page == SubPage::Mods) title = "MODS";
+    else if (page == SubPage::Awards) title = "AWARDS";
+    else if (page == SubPage::Credits) title = "CREDITS";
+    else if (page == SubPage::Donate) title = "DONATE";
+    else if (page == SubPage::Options) title = "OPTIONS";
+
+    drawCenteredText(scene, title, boxY + 52, 9, white);
+    drawCenteredText(scene, "THE ORIGINAL MENU ASSETS ARE LOADED", boxY + 175, 4, muted);
+    drawCenteredText(scene, "GAMEPLAY AND THIS SUBMENU ARE NOT PORTED", boxY + 225, 4, muted);
+    drawCenteredText(scene, "PRESS O TO RETURN", boxY + 286, 4, white);
 }
 } // namespace
 
 int main() {
     setvbuf(stdout, nullptr, _IONBF, 0);
-    printf("PsychEngine PS4 native menu starting.\n");
+    printf("PsychEngine PS4 v0.2 - original Psych Engine menu assets.\n");
 
-    Scene2D *scene = new Scene2D(kWidth, kHeight, 4);
+    Scene2D *scene = new Scene2D(kScreenWidth, kScreenHeight, 4);
     if (!scene->Init(0x0C000000, 2)) {
         printf("Video output initialization failed.\n");
         for (;;) sceKernelUsleep(250000);
     }
 
+    Ps4Image background("/app0/assets/psychmenu/menu_background.png");
+    Ps4Image storyBasic("/app0/assets/psychmenu/story_mode_basic.png");
+    Ps4Image storySelected("/app0/assets/psychmenu/story_mode_selected.png");
+    Ps4Image freeplayBasic("/app0/assets/psychmenu/freeplay_basic.png");
+    Ps4Image freeplaySelected("/app0/assets/psychmenu/freeplay_selected.png");
+    Ps4Image modsBasic("/app0/assets/psychmenu/mods_basic.png");
+    Ps4Image modsSelected("/app0/assets/psychmenu/mods_selected.png");
+    Ps4Image awardsBasic("/app0/assets/psychmenu/awards_basic.png");
+    Ps4Image awardsSelected("/app0/assets/psychmenu/awards_selected.png");
+    Ps4Image creditsBasic("/app0/assets/psychmenu/credits_basic.png");
+    Ps4Image creditsSelected("/app0/assets/psychmenu/credits_selected.png");
+    Ps4Image donateBasic("/app0/assets/psychmenu/donate_basic.png");
+    Ps4Image donateSelected("/app0/assets/psychmenu/donate_selected.png");
+    Ps4Image optionsBasic("/app0/assets/psychmenu/options_basic.png");
+    Ps4Image optionsSelected("/app0/assets/psychmenu/options_selected.png");
+
+    MenuOption items[] = {
+        {"story_mode", &storyBasic, &storySelected},
+        {"freeplay", &freeplayBasic, &freeplaySelected},
+        {"mods", &modsBasic, &modsSelected},
+        {"awards", &awardsBasic, &awardsSelected},
+        {"credits", &creditsBasic, &creditsSelected},
+        {"donate", &donateBasic, &donateSelected},
+        {"options", &optionsBasic, &optionsSelected}
+    };
+    constexpr int itemCount = sizeof(items) / sizeof(items[0]);
+
+    if (!background.valid()) {
+        printf("Original menu background missing from the package.\n");
+        for (;;) sceKernelUsleep(250000);
+    }
+    for (int i = 0; i < itemCount; ++i) {
+        if (!items[i].basic->valid() || !items[i].selected->valid()) {
+            printf("Original menu sprite missing: %s\n", items[i].name);
+            for (;;) sceKernelUsleep(250000);
+        }
+    }
+
     int padHandle = -1;
     const bool controllerReady = initController(padHandle);
+    if (!controllerReady) {
+        printf("Warning: controller is not ready; the original menu stays visible but cannot change selection.\n");
+    }
+
     uint32_t previousButtons = 0;
-    int selected = 0;
-    bool blueTheme = false;
-    Page page = Page::Main;
+    int selectedIndex = 0;
+    SubPage page = SubPage::None;
     int frameId = 0;
 
     for (;;) {
@@ -234,26 +271,32 @@ int main() {
             }
         }
 
-        if (page == Page::Main) {
-            if (pressed & ORBIS_PAD_BUTTON_UP) selected = (selected + 2) % 3;
-            if (pressed & ORBIS_PAD_BUTTON_DOWN) selected = (selected + 1) % 3;
+        if (page == SubPage::None) {
+            if (pressed & ORBIS_PAD_BUTTON_UP) {
+                selectedIndex = (selectedIndex + itemCount - 1) % itemCount;
+            }
+            if (pressed & ORBIS_PAD_BUTTON_DOWN) {
+                selectedIndex = (selectedIndex + 1) % itemCount;
+            }
             if (pressed & ORBIS_PAD_BUTTON_CROSS) {
-                if (selected == 0) page = Page::Story;
-                else if (selected == 1) page = Page::Freeplay;
-                else page = Page::Options;
+                switch (selectedIndex) {
+                    case 0: page = SubPage::Story; break;
+                    case 1: page = SubPage::Freeplay; break;
+                    case 2: page = SubPage::Mods; break;
+                    case 3: page = SubPage::Awards; break;
+                    case 4: page = SubPage::Credits; break;
+                    case 5: page = SubPage::Donate; break;
+                    default: page = SubPage::Options; break;
+                }
             }
-        } else {
-            if (page == Page::Options &&
-                (pressed & (ORBIS_PAD_BUTTON_LEFT | ORBIS_PAD_BUTTON_RIGHT))) {
-                blueTheme = !blueTheme;
-            }
-            if (pressed & ORBIS_PAD_BUTTON_CIRCLE) page = Page::Main;
+        } else if (pressed & ORBIS_PAD_BUTTON_CIRCLE) {
+            page = SubPage::None;
         }
 
-        if (page == Page::Main) {
-            drawMainMenu(scene, selected, controllerReady, blueTheme);
+        if (page == SubPage::None) {
+            drawMainMenu(scene, background, items, itemCount, selectedIndex);
         } else {
-            drawSubPage(scene, page, blueTheme);
+            drawPlaceholder(scene, background, page);
         }
 
         scene->SubmitFlip(frameId);
@@ -261,6 +304,4 @@ int main() {
         scene->FrameBufferSwap();
         ++frameId;
     }
-
-    return 0;
 }
