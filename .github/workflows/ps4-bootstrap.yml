@@ -122,7 +122,7 @@ jobs:
       - name: Upload bootstrap test artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: PsychEnginePs4-bootstrap-preview-v01-01
+          name: PsychEnginePs4-menu-preview-v0.2
           path: |
             IV0000-PSYH00001_00-PSYCHENG00000000.pkg
             eboot.bin
