@@ -17,7 +17,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install build dependencies
-        run: sudo apt-get update && sudo apt-get install -y make curl libicu-dev clang lld python3 zlib1g-dev
+        run: sudo apt-get update && sudo apt-get install -y make curl libicu-dev clang lld python3 python3-pil zlib1g-dev
       - name: Install libssl1.1 for OpenOrbis package tool
         shell: bash
         run: |
@@ -38,6 +38,19 @@ jobs:
           test -f "$root/link.x"
           echo "OO_PS4_TOOLCHAIN=$root" >> "$GITHUB_ENV"
           echo "OO_PS4_TOOLCHAIN=$root"
+      - name: Prepare original Psych Engine menu assets and patch renderer
+        shell: bash
+        run: |
+          set -euo pipefail
+          base='https://raw.githubusercontent.com/ShadowMario/FNF-PsychEngine/0.6.3/assets/preload/images'
+          mkdir -p assets/psychmenu/source
+          curl -fsSL "$base/menuBG.png" -o assets/psychmenu/source/menuBG.png
+          for item in story_mode freeplay mods awards credits donate options; do
+            curl -fsSL "$base/mainmenu/menu_$item.png" -o "assets/psychmenu/source/menu_$item.png"
+            curl -fsSL "$base/mainmenu/menu_$item.xml" -o "assets/psychmenu/source/menu_$item.xml"
+          done
+          python3 tools/prepare_psych_menu.py --source assets/psychmenu/source --out assets/psychmenu
+          python3 tools/patch_openorbis_graphics.py "$OO_PS4_TOOLCHAIN/samples/_common/graphics.h" "$OO_PS4_TOOLCHAIN/samples/_common/graphics.cpp"
       - name: Prepare package metadata, runtime modules, and valid icon
         shell: bash
         run: |
@@ -122,7 +135,7 @@ jobs:
       - name: Upload bootstrap test artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: PsychEnginePs4-menu-preview-v0.2
+          name: PsychEnginePs4-original-menu-v0.2
           path: |
             IV0000-PSYH00001_00-PSYCHENG00000000.pkg
             eboot.bin
