@@ -1,5 +1,5 @@
-TITLE := PsychEngine Bootstrap
-VERSION := 01.01
+TITLE := PsychEngine PS4
+VERSION := 01.02
 TITLE_ID := PSYH00001
 CONTENT_ID := IV0000-PSYH00001_00-PSYCHENG00000000
 
@@ -11,7 +11,7 @@ OUT_ELF := $(INTDIR)/psychengine_ps4_bootstrap.elf
 OUT_OELF := $(INTDIR)/psychengine_ps4_bootstrap.oelf
 PKG := $(CONTENT_ID).pkg
 
-LIBS := -lc -lkernel -lc++ -lSceVideoOut
+LIBS := -lc -lkernel -lc++ -lSceVideoOut -lScePad -lSceUserService
 OBJS := $(INTDIR)/main.o $(INTDIR)/graphics.o
 TARGET_FLAGS := --target=x86_64-pc-freebsd12-elf -fPIC -funwind-tables -c -isysroot $(TOOLCHAIN) -isystem $(TOOLCHAIN)/include
 CXXFLAGS := $(TARGET_FLAGS) -isystem $(TOOLCHAIN)/include/c++/v1 -I$(COMMONDIR)
