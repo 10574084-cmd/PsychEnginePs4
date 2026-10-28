@@ -10,11 +10,12 @@ INTDIR := build
 OUT_ELF := $(INTDIR)/psychengine_ps4_bootstrap.elf
 OUT_OELF := $(INTDIR)/psychengine_ps4_bootstrap.oelf
 PKG := $(CONTENT_ID).pkg
+MENU_ASSETS := $(wildcard assets/psychmenu/*.png)
 
 LIBS := -lc -lkernel -lc++ -lSceVideoOut -lScePad -lSceUserService
-OBJS := $(INTDIR)/main.o $(INTDIR)/graphics.o
+OBJS := $(INTDIR)/main.o $(INTDIR)/graphics.o $(INTDIR)/ps4png.o
 TARGET_FLAGS := --target=x86_64-pc-freebsd12-elf -fPIC -funwind-tables -c -isysroot $(TOOLCHAIN) -isystem $(TOOLCHAIN)/include
-CXXFLAGS := $(TARGET_FLAGS) -isystem $(TOOLCHAIN)/include/c++/v1 -I$(COMMONDIR)
+CXXFLAGS := $(TARGET_FLAGS) -isystem $(TOOLCHAIN)/include/c++/v1 -I$(COMMONDIR) -Isrc
 LDFLAGS := -m elf_x86_64 -pie --script $(TOOLCHAIN)/link.x --eh-frame-hdr -L$(TOOLCHAIN)/lib $(LIBS) $(TOOLCHAIN)/lib/crt1.o
 
 all: $(PKG)
@@ -22,10 +23,13 @@ all: $(PKG)
 $(INTDIR):
 	mkdir -p $@
 
-$(INTDIR)/main.o: src/main.cpp $(COMMONDIR)/graphics.h | $(INTDIR)
+$(INTDIR)/main.o: src/main.cpp src/ps4png.h $(COMMONDIR)/graphics.h | $(INTDIR)
 	$(CXX) $(CXXFLAGS) -o $@ $<
 
-$(INTDIR)/graphics.o: $(COMMONDIR)/graphics.cpp $(COMMONDIR)/graphics.h $(COMMONDIR)/log.h | $(INTDIR)
+$(INTDIR)/graphics.o: $(COMMONDIR)/graphics.cpp $(COMMONDIR)/graphics.h
+	$(CXX) $(CXXFLAGS) -o $@ $<
+
+$(INTDIR)/ps4png.o: src/ps4png.cpp src/ps4png.h $(COMMONDIR)/graphics.h
 	$(CXX) $(CXXFLAGS) -o $@ $<
 
 $(OUT_ELF): $(OBJS)
@@ -48,7 +52,7 @@ sce_sys/param.sfo: Makefile
 	$(PKGTOOLS)/PkgTool.Core sfo_setentry $@ TITLE_ID --type Utf8 --maxsize 12 --value '$(TITLE_ID)'
 	$(PKGTOOLS)/PkgTool.Core sfo_setentry $@ VERSION --type Utf8 --maxsize 8 --value '$(VERSION)'
 
-pkg.gp4: eboot.bin sce_sys/param.sfo sce_sys/icon0.png sce_sys/about/right.sprx sce_module/libc.prx sce_module/libSceFios2.prx
+pkg.gp4: eboot.bin sce_sys/param.sfo sce_sys/icon0.png sce_sys/about/right.sprx sce_module/libc.prx sce_module/libSceFios2.prx $(MENU_ASSETS)
 	$(PKGTOOLS)/create-gp4 -out $@ --content-id=$(CONTENT_ID) --files "$^"
 
 $(PKG): pkg.gp4
