@@ -19,6 +19,7 @@ MENU_ITEMS = (
 SCREEN_W = 1920
 SCREEN_H = 1080
 GAME_SCALE = 1.5
+RESAMPLE_LANCZOS = getattr(getattr(Image, "Resampling", Image), "LANCZOS")
 
 def crop_animation_frame(atlas_path: Path, xml_path: Path, item: str, state: str, out_path: Path) -> tuple[int, int]:
     root = ET.parse(xml_path).getroot()
@@ -34,7 +35,7 @@ def crop_animation_frame(atlas_path: Path, xml_path: Path, item: str, state: str
     with Image.open(atlas_path) as atlas:
         frame = atlas.convert("RGBA").crop((x, y, x + w, y + h))
     size = (round(w * GAME_SCALE), round(h * GAME_SCALE))
-    frame = frame.resize(size, Image.Resampling.LANCZOS)
+    frame = frame.resize(size, RESAMPLE_LANCZOS)
     frame.save(out_path, format="PNG", optimize=True)
     return size
 
@@ -50,7 +51,7 @@ def main() -> None:
     with Image.open(args.source / "menuBG.png") as source:
         bg = source.convert("RGB")
         size = (round(bg.width * 1.175 * GAME_SCALE), round(bg.height * 1.175 * GAME_SCALE))
-        bg = bg.resize(size, Image.Resampling.LANCZOS)
+        bg = bg.resize(size, RESAMPLE_LANCZOS)
         left = (bg.width - SCREEN_W) // 2
         top = (bg.height - SCREEN_H) // 2
         bg = bg.crop((left, top, left + SCREEN_W, top + SCREEN_H))
