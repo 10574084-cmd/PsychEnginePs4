@@ -1,0 +1,86 @@
+name: PsychEnginePs4 native bootstrap
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ps4-bootstrap.yml'
+      - 'Makefile'
+      - 'src/**'
+      - 'tools/**'
+      - 'sce_sys/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build-bootstrap:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install -y make curl libicu-dev clang lld python3 zlib1g-dev
+      - name: Install libssl1.1 for OpenOrbis package tool
+        shell: bash
+        run: |
+          set -euo pipefail
+          base='http://security.ubuntu.com/ubuntu/pool/main/o/openssl/'
+          ver="$(curl -fsSL "$base" | grep -oE 'libssl1\.1_1\.1\.1f-[0-9a-z.~+]+_amd64\.deb' | sed -E 's/^libssl1\.1_(.*)_amd64\.deb$/\1/' | sort -V | tail -1)"
+          test -n "$ver"
+          curl -fsSL "$base/libssl1.1_$ver"_amd64.deb -o /tmp/libssl1.1.deb
+          sudo dpkg -i /tmp/libssl1.1.deb || sudo apt-get install -f -y
+      - name: Download OpenOrbis toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/download/v0.5.4/toolchain-llvm-18.tar.gz -o /tmp/oo.tar.gz
+          mkdir -p "$HOME/oo"
+          tar -xzf /tmp/oo.tar.gz -C "$HOME/oo"
+          root="$(dirname "$(find "$HOME/oo" -name link.x -print -quit)")"
+          test -f "$root/link.x"
+          echo "OO_PS4_TOOLCHAIN=$root" >> "$GITHUB_ENV"
+          echo "OO_PS4_TOOLCHAIN=$root"
+      - name: Prepare package metadata and icon
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p sce_sys/about
+          right="$(find "$OO_PS4_TOOLCHAIN" -name right.sprx -print -quit)"
+          test -n "$right"
+          cp "$right" sce_sys/about/right.sprx
+          python3 - <<'PY'
+          import struct, zlib
+          w = h = 512
+          raw = bytearray()
+          for y in range(h):
+              raw.append(0)
+              for x in range(w):
+                  if 96 <= x < 416 and (128 <= y < 140 or 372 <= y < 384):
+                      rgb = (230, 40, 60)
+                  elif 120 <= x < 392 and 190 <= y < 322 and (abs(x - 256) < 5 or abs(y - 256) < 5):
+                      rgb = (235, 235, 235)
+                  else:
+                      rgb = (18, 20, 28)
+                  raw.extend(rgb)
+          def chunk(tag, data):
+              return struct.pack('>I', len(data)) + tag + data + struct.pack('>I', zlib.crc32(tag + data) & 0xffffffff)
+          png = b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>2I5B', w, h, 8, 2, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(bytes(raw), 9)) + chunk(b'IEND', b'')
+          with open('sce_sys/icon0.png', 'wb') as icon:
+              icon.write(png)
+          PY
+      - name: Build PS4 bootstrap ELF and PKG
+        shell: bash
+        run: |
+          set -euo pipefail
+          make
+          test -s 'IV0000-PSYH00001_00-PSYCHENGINEPS400001.pkg'
+          test -s eboot.bin
+          file eboot.bin 'IV0000-PSYH00001_00-PSYCHENGINEPS400001.pkg' || true
+      - name: Upload native bootstrap artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: PsychEnginePs4-native-bootstrap-not-game
+          path: |
+            IV0000-PSYH00001_00-PSYCHENGINEPS400001.pkg
+            eboot.bin
+            build/psychengine_ps4_bootstrap.elf
+          if-no-files-found: error
+          retention-days: 14
