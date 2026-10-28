@@ -38,41 +38,70 @@ jobs:
           test -f "$root/link.x"
           echo "OO_PS4_TOOLCHAIN=$root" >> "$GITHUB_ENV"
           echo "OO_PS4_TOOLCHAIN=$root"
-      - name: Prepare package metadata and icon
+      - name: Prepare package metadata, runtime modules, and valid icon
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p sce_sys/about
-          right="$(find "$OO_PS4_TOOLCHAIN" -name right.sprx -print -quit)"
+          mkdir -p sce_sys/about sce_module
+          right="$(find "$OO_PS4_TOOLCHAIN" \( -name right.sprx -o -name right.prx \) -print -quit)"
           test -n "$right"
           cp "$right" sce_sys/about/right.sprx
+
+          for module in libc.prx libSceFios2.prx; do
+            module_path="$(find "$OO_PS4_TOOLCHAIN" -name "$module" -print -quit)"
+            if [[ -z "$module_path" ]]; then
+              echo "::error::Required runtime module $module was not found in the OpenOrbis toolchain archive."
+              find "$OO_PS4_TOOLCHAIN" -iname '*.prx' -print | head -80 || true
+              exit 1
+            fi
+            cp "$module_path" "sce_module/$module"
+            echo "Bundled runtime module: $module_path"
+          done
+
           python3 - <<'PY'
           import struct, zlib
           w = h = 512
           raw = bytearray()
+          p_rows = [0x1E, 0x11, 0x11, 0x1E, 0x10, 0x10, 0x10]
+          scale = 42
+          px0, py0 = 151, 110
           for y in range(h):
               raw.append(0)
               for x in range(w):
-                  if 96 <= x < 416 and (128 <= y < 140 or 372 <= y < 384):
-                      rgb = (230, 40, 60)
-                  elif 120 <= x < 392 and 190 <= y < 322 and (abs(x - 256) < 5 or abs(y - 256) < 5):
-                      rgb = (235, 235, 235)
+                  if x < 14 or x >= w - 14 or y < 14 or y >= h - 14:
+                      rgb = (239, 45, 71)
+                  elif 80 <= x < 432 and 424 <= y < 438:
+                      rgb = (68, 190, 255)
                   else:
-                      rgb = (18, 20, 28)
+                      gx = (x - px0) // scale
+                      gy = (y - py0) // scale
+                      is_p = (0 <= gx < 5 and 0 <= gy < 7 and
+                              (p_rows[gy] & (1 << (4 - gx))) != 0)
+                      rgb = (244, 246, 250) if is_p else (13, 16, 31)
                   raw.extend(rgb)
           def chunk(tag, data):
-              return struct.pack('>I', len(data)) + tag + data + struct.pack('>I', zlib.crc32(tag + data) & 0xffffffff)
-          png = b'\\x89PNG\\r\\n\\x1a\\n' + chunk(b'IHDR', struct.pack('>2I5B', w, h, 8, 2, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(bytes(raw), 9)) + chunk(b'IEND', b'')
+              return (struct.pack('>I', len(data)) + tag + data +
+                      struct.pack('>I', zlib.crc32(tag + data) & 0xffffffff))
+          png = (bytes([137, 80, 78, 71, 13, 10, 26, 10]) +
+                 chunk(b'IHDR', struct.pack('>2I5B', w, h, 8, 2, 0, 0, 0)) +
+                 chunk(b'IDAT', zlib.compress(bytes(raw), 9)) +
+                 chunk(b'IEND', b''))
           with open('sce_sys/icon0.png', 'wb') as icon:
               icon.write(png)
+          data = open('sce_sys/icon0.png', 'rb').read()
+          assert data[:8] == bytes([137, 80, 78, 71, 13, 10, 26, 10]), 'invalid PNG signature'
+          assert data[12:16] == b'IHDR', 'missing PNG IHDR'
+          width, height, depth, color_type, *_ = struct.unpack('>IIBBBBB', data[16:29])
+          assert (width, height, depth, color_type) == (512, 512, 8, 2), 'icon must be 512x512 RGB PNG'
+          print(f'Validated icon0.png: {width}x{height}, 24-bit RGB')
           PY
+          file sce_sys/icon0.png
       - name: Build PS4 bootstrap ELF and PKG
         shell: bash
         run: |
           set -euo pipefail
-          # OpenOrbis ships the PS4 SDK headers, libraries and packaging tools;
-          # host Clang/LLD are installed separately per the upstream setup docs.
           clang_bin="$(command -v clang)"
+          cxx_bin="$(command -v clang++)"
           lld_bin="$(command -v ld.lld || true)"
           if [[ -z "$lld_bin" ]]; then
             lld_bin="$(command -v ld.lld-14 || true)"
@@ -81,22 +110,26 @@ jobs:
             lld_bin="$(find /usr/bin /usr/local/bin -name 'ld.lld-*' -executable -print -quit 2>/dev/null || true)"
           fi
           echo "Host clang: $clang_bin"
+          echo "Host clang++: $cxx_bin"
           echo "Host LLD: $lld_bin"
           test -x "$clang_bin"
+          test -x "$cxx_bin"
           test -x "$lld_bin"
-          "$clang_bin" --version
-          "$lld_bin" --version
-          make CC="$clang_bin" LD="$lld_bin"
+          make CC="$clang_bin" CXX="$cxx_bin" LD="$lld_bin"
           test -s 'IV0000-PSYH00001_00-PSYCHENG00000000.pkg'
           test -s eboot.bin
-          file eboot.bin 'IV0000-PSYH00001_00-PSYCHENG00000000.pkg' || true
-      - name: Upload native bootstrap artifacts
+          file eboot.bin 'IV0000-PSYH00001_00-PSYCHENG00000000.pkg'
+      - name: Upload bootstrap test artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: PsychEnginePs4-native-bootstrap-not-game
+          name: PsychEnginePs4-bootstrap-preview-v01-01
           path: |
             IV0000-PSYH00001_00-PSYCHENG00000000.pkg
             eboot.bin
             build/psychengine_ps4_bootstrap.elf
+            sce_sys/icon0.png
+            sce_sys/param.sfo
+            sce_module/libc.prx
+            sce_module/libSceFios2.prx
           if-no-files-found: error
           retention-days: 14
