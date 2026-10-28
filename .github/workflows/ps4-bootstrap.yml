@@ -71,15 +71,15 @@ jobs:
         run: |
           set -euo pipefail
           make
-          test -s 'IV0000-PSYH00001_00-PSYCHENGINEPS400001.pkg'
+          test -s 'IV0000-PSYH00001_00-PSYCHENG00000000.pkg'
           test -s eboot.bin
-          file eboot.bin 'IV0000-PSYH00001_00-PSYCHENGINEPS400001.pkg' || true
+          file eboot.bin 'IV0000-PSYH00001_00-PSYCHENG00000000.pkg' || true
       - name: Upload native bootstrap artifacts
         uses: actions/upload-artifact@v4
         with:
           name: PsychEnginePs4-native-bootstrap-not-game
           path: |
-            IV0000-PSYH00001_00-PSYCHENGINEPS400001.pkg
+            IV0000-PSYH00001_00-PSYCHENG00000000.pkg
             eboot.bin
             build/psychengine_ps4_bootstrap.elf
           if-no-files-found: error
