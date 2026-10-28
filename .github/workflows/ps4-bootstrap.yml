@@ -70,10 +70,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          clang_bin="$(find "$OO_PS4_TOOLCHAIN" -type f -name clang -print -quit)"
-          lld_bin="$(find "$OO_PS4_TOOLCHAIN" -type f -name ld.lld -print -quit)"
-          test -n "$clang_bin"
-          test -n "$lld_bin"
+          clang_bin="$(find "$OO_PS4_TOOLCHAIN" -name clang -print -quit)"
+          lld_bin="$(find "$OO_PS4_TOOLCHAIN" -name ld.lld -print -quit)"
+          echo "OpenOrbis clang: $clang_bin"
+          echo "OpenOrbis linker: $lld_bin"
+          test -x "$clang_bin"
+          test -x "$lld_bin"
           make CC="$clang_bin" LD="$lld_bin"
           test -s 'IV0000-PSYH00001_00-PSYCHENG00000000.pkg'
           test -s eboot.bin
