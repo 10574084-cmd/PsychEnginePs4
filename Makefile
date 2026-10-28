@@ -1,50 +1,61 @@
-TITLE := PsychEnginePs4 Bootstrap
-VERSION := 01.00
+TITLE := PsychEngine Bootstrap
+VERSION := 01.01
 TITLE_ID := PSYH00001
 CONTENT_ID := IV0000-PSYH00001_00-PSYCHENG00000000
+
 TOOLCHAIN := $(OO_PS4_TOOLCHAIN)
-CORE_LIBS := -lc -lkernel -lc++ -lSceLibcInternal
-ALL_STUBS := $(sort $(patsubst $(TOOLCHAIN)/lib/lib%.so,-l%,$(wildcard $(TOOLCHAIN)/lib/lib*.so)) $(patsubst $(TOOLCHAIN)/lib/lib%.a,-l%,$(wildcard $(TOOLCHAIN)/lib/lib*.a)))
-EXTRA_LIBS := $(filter-out $(CORE_LIBS),$(ALL_STUBS))
+PKGTOOLS := $(TOOLCHAIN)/bin/linux
+COMMONDIR := $(TOOLCHAIN)/samples/_common
 INTDIR := build
 OUT_ELF := $(INTDIR)/psychengine_ps4_bootstrap.elf
 OUT_OELF := $(INTDIR)/psychengine_ps4_bootstrap.oelf
-PKG := $(TOOLCHAIN)/bin/linux
-OBJS := $(INTDIR)/main.o
-CFLAGS := --target=x86_64-pc-freebsd12-elf -fPIC -funwind-tables -c -isysroot $(TOOLCHAIN) -isystem $(TOOLCHAIN)/include
-LDFLAGS := -m elf_x86_64 -pie --script $(TOOLCHAIN)/link.x --eh-frame-hdr -L$(TOOLCHAIN)/lib $(CORE_LIBS) --as-needed $(EXTRA_LIBS) --no-as-needed $(TOOLCHAIN)/lib/crt1.o
+PKG := $(CONTENT_ID).pkg
 
-all: $(CONTENT_ID).pkg
+LIBS := -lc -lkernel -lc++ -lSceVideoOut
+OBJS := $(INTDIR)/main.o $(INTDIR)/graphics.o
+TARGET_FLAGS := --target=x86_64-pc-freebsd12-elf -fPIC -funwind-tables -c -isysroot $(TOOLCHAIN) -isystem $(TOOLCHAIN)/include
+CXXFLAGS := $(TARGET_FLAGS) -isystem $(TOOLCHAIN)/include/c++/v1 -I$(COMMONDIR)
+LDFLAGS := -m elf_x86_64 -pie --script $(TOOLCHAIN)/link.x --eh-frame-hdr -L$(TOOLCHAIN)/lib $(LIBS) $(TOOLCHAIN)/lib/crt1.o
+
+all: $(PKG)
 
 $(INTDIR):
-	mkdir -p $(INTDIR)
+	mkdir -p $@
 
-$(INTDIR)/main.o: src/main.c | $(INTDIR)
-	$(CC) $(CFLAGS) -o $@ $<
+$(INTDIR)/main.o: src/main.cpp $(COMMONDIR)/graphics.h | $(INTDIR)
+	$(CXX) $(CXXFLAGS) -o $@ $<
 
-eboot.bin: $(OBJS)
-	$(LD) $(OBJS) -o $(OUT_ELF) $(LDFLAGS)
-	$(PKG)/create-fself -in=$(OUT_ELF) -out=$(OUT_OELF) --eboot "eboot.bin" --paid 0x3100000000000001
+$(INTDIR)/graphics.o: $(COMMONDIR)/graphics.cpp $(COMMONDIR)/graphics.h $(COMMONDIR)/log.h | $(INTDIR)
+	$(CXX) $(CXXFLAGS) -o $@ $<
+
+$(OUT_ELF): $(OBJS)
+	$(LD) $(OBJS) -o $@ $(LDFLAGS)
+
+eboot.bin: $(OUT_ELF)
+	$(PKGTOOLS)/create-fself -in=$(OUT_ELF) -out=$(OUT_OELF) --eboot "eboot.bin" --paid 0x3100000000000001
+	test -s eboot.bin
 
 sce_sys/param.sfo: Makefile
-	$(PKG)/PkgTool.Core sfo_new $@
-	$(PKG)/PkgTool.Core sfo_setentry $@ APP_TYPE --type Integer --maxsize 4 --value 1
-	$(PKG)/PkgTool.Core sfo_setentry $@ APP_VER --type Utf8 --maxsize 8 --value '$(VERSION)'
-	$(PKG)/PkgTool.Core sfo_setentry $@ ATTRIBUTE --type Integer --maxsize 4 --value 0
-	$(PKG)/PkgTool.Core sfo_setentry $@ CATEGORY --type Utf8 --maxsize 4 --value 'gd'
-	$(PKG)/PkgTool.Core sfo_setentry $@ CONTENT_ID --type Utf8 --maxsize 48 --value '$(CONTENT_ID)'
-	$(PKG)/PkgTool.Core sfo_setentry $@ DOWNLOAD_DATA_SIZE --type Integer --maxsize 4 --value 0
-	$(PKG)/PkgTool.Core sfo_setentry $@ SYSTEM_VER --type Integer --maxsize 4 --value 0
-	$(PKG)/PkgTool.Core sfo_setentry $@ TITLE --type Utf8 --maxsize 128 --value '$(TITLE)'
-	$(PKG)/PkgTool.Core sfo_setentry $@ TITLE_ID --type Utf8 --maxsize 12 --value '$(TITLE_ID)'
-	$(PKG)/PkgTool.Core sfo_setentry $@ VERSION --type Utf8 --maxsize 8 --value '$(VERSION)'
+	$(PKGTOOLS)/PkgTool.Core sfo_new $@
+	$(PKGTOOLS)/PkgTool.Core sfo_setentry $@ APP_TYPE --type Integer --maxsize 4 --value 1
+	$(PKGTOOLS)/PkgTool.Core sfo_setentry $@ APP_VER --type Utf8 --maxsize 8 --value '$(VERSION)'
+	$(PKGTOOLS)/PkgTool.Core sfo_setentry $@ ATTRIBUTE --type Integer --maxsize 4 --value 0
+	$(PKGTOOLS)/PkgTool.Core sfo_setentry $@ CATEGORY --type Utf8 --maxsize 4 --value 'gd'
+	$(PKGTOOLS)/PkgTool.Core sfo_setentry $@ CONTENT_ID --type Utf8 --maxsize 48 --value '$(CONTENT_ID)'
+	$(PKGTOOLS)/PkgTool.Core sfo_setentry $@ DOWNLOAD_DATA_SIZE --type Integer --maxsize 4 --value 0
+	$(PKGTOOLS)/PkgTool.Core sfo_setentry $@ SYSTEM_VER --type Integer --maxsize 4 --value 0
+	$(PKGTOOLS)/PkgTool.Core sfo_setentry $@ TITLE --type Utf8 --maxsize 128 --value '$(TITLE)'
+	$(PKGTOOLS)/PkgTool.Core sfo_setentry $@ TITLE_ID --type Utf8 --maxsize 12 --value '$(TITLE_ID)'
+	$(PKGTOOLS)/PkgTool.Core sfo_setentry $@ VERSION --type Utf8 --maxsize 8 --value '$(VERSION)'
 
-pkg.gp4: eboot.bin sce_sys/param.sfo sce_sys/icon0.png sce_sys/about/right.sprx
-	python3 tools/make_gp4.py --out $@ --content-id $(CONTENT_ID) $^
+pkg.gp4: eboot.bin sce_sys/param.sfo sce_sys/icon0.png sce_sys/about/right.sprx sce_module/libc.prx sce_module/libSceFios2.prx
+	$(PKGTOOLS)/create-gp4 -out $@ --content-id=$(CONTENT_ID) --files "$^"
 
-$(CONTENT_ID).pkg: pkg.gp4
-	$(PKG)/PkgTool.Core pkg_build $< .
+$(PKG): pkg.gp4
+	$(PKGTOOLS)/PkgTool.Core pkg_build $< .
+	test -s $@
 
 clean:
 	rm -rf $(INTDIR) eboot.bin pkg.gp4 sce_sys/param.sfo *.pkg
+
 .PHONY: all clean
