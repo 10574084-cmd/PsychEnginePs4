@@ -62,7 +62,7 @@ jobs:
                   raw.extend(rgb)
           def chunk(tag, data):
               return struct.pack('>I', len(data)) + tag + data + struct.pack('>I', zlib.crc32(tag + data) & 0xffffffff)
-          png = b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>2I5B', w, h, 8, 2, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(bytes(raw), 9)) + chunk(b'IEND', b'')
+          png = b'\\x89PNG\\r\\n\\x1a\\n' + chunk(b'IHDR', struct.pack('>2I5B', w, h, 8, 2, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(bytes(raw), 9)) + chunk(b'IEND', b'')
           with open('sce_sys/icon0.png', 'wb') as icon:
               icon.write(png)
           PY
@@ -70,12 +70,22 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          clang_bin="$(find "$OO_PS4_TOOLCHAIN" -name clang -print -quit)"
-          lld_bin="$(find "$OO_PS4_TOOLCHAIN" -name ld.lld -print -quit)"
-          echo "OpenOrbis clang: $clang_bin"
-          echo "OpenOrbis linker: $lld_bin"
+          # OpenOrbis ships the PS4 SDK headers, libraries and packaging tools;
+          # host Clang/LLD are installed separately per the upstream setup docs.
+          clang_bin="$(command -v clang)"
+          lld_bin="$(command -v ld.lld || true)"
+          if [[ -z "$lld_bin" ]]; then
+            lld_bin="$(command -v ld.lld-14 || true)"
+          fi
+          if [[ -z "$lld_bin" ]]; then
+            lld_bin="$(find /usr/bin /usr/local/bin -name 'ld.lld-*' -executable -print -quit 2>/dev/null || true)"
+          fi
+          echo "Host clang: $clang_bin"
+          echo "Host LLD: $lld_bin"
           test -x "$clang_bin"
           test -x "$lld_bin"
+          "$clang_bin" --version
+          "$lld_bin" --version
           make CC="$clang_bin" LD="$lld_bin"
           test -s 'IV0000-PSYH00001_00-PSYCHENG00000000.pkg'
           test -s eboot.bin
