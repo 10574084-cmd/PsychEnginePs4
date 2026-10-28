@@ -1,7 +1,7 @@
 TITLE := PsychEnginePs4 Bootstrap
 VERSION := 01.00
 TITLE_ID := PSYH00001
-CONTENT_ID := IV0000-PSYH00001_00-PSYCHENGINEPS400001
+CONTENT_ID := IV0000-PSYH00001_00-PSYCHENG00000000
 TOOLCHAIN := $(OO_PS4_TOOLCHAIN)
 CORE_LIBS := -lc -lkernel -lc++ -lSceLibcInternal
 ALL_STUBS := $(sort $(patsubst $(TOOLCHAIN)/lib/lib%.so,-l%,$(wildcard $(TOOLCHAIN)/lib/lib*.so)) $(patsubst $(TOOLCHAIN)/lib/lib%.a,-l%,$(wildcard $(TOOLCHAIN)/lib/lib*.a)))
