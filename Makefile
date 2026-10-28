@@ -53,7 +53,7 @@ sce_sys/param.sfo: Makefile
 	$(PKGTOOLS)/PkgTool.Core sfo_setentry $@ VERSION --type Utf8 --maxsize 8 --value '$(VERSION)'
 
 pkg.gp4: eboot.bin sce_sys/param.sfo sce_sys/icon0.png sce_sys/about/right.sprx sce_module/libc.prx sce_module/libSceFios2.prx $(MENU_ASSETS)
-	$(PKGTOOLS)/create-gp4 -out $@ --content-id=$(CONTENT_ID) --files "$^"
+	python3 tools/make_gp4.py --out $@ --content-id $(CONTENT_ID) $^
 
 $(PKG): pkg.gp4
 	$(PKGTOOLS)/PkgTool.Core pkg_build $< .
