@@ -20,10 +20,10 @@ $(INTDIR):
 	mkdir -p $(INTDIR)
 
 $(INTDIR)/main.o: src/main.c | $(INTDIR)
-	clang $(CFLAGS) -o $@ $<
+	$(CC) $(CFLAGS) -o $@ $<
 
 eboot.bin: $(OBJS)
-	ld.lld $(OBJS) -o $(OUT_ELF) $(LDFLAGS)
+	$(LD) $(OBJS) -o $(OUT_ELF) $(LDFLAGS)
 	$(PKG)/create-fself -in=$(OUT_ELF) -out=$(OUT_OELF) --eboot "eboot.bin" --paid 0x3100000000000001
 
 sce_sys/param.sfo: Makefile
