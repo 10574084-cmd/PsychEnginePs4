@@ -674,9 +674,9 @@ void drawMainMenu(Scene2D *scene, Ps4Image &background, MenuOption *items,
     const int footerScale = 2;
 
     if (gMenuSettings.showVersionInfo) {
-        drawText(scene, "PSYCH ENGINE PS4 BETA", 18, kScreenHeight - 94, footerScale, white);
-        drawText(scene, "PSYCH ENGINE V0.6.3", 18, kScreenHeight - 66, footerScale, white);
-        drawText(scene, "FRIDAY NIGHT FUNKIN V0.2", 18, kScreenHeight - 38, footerScale, white);
+        drawText(scene, "PSYCH ENGINE PORT WIP", 18, kScreenHeight - 94, footerScale, white);
+        drawText(scene, "SOURCE: HAXE 0.6.3", 18, kScreenHeight - 66, footerScale, white);
+        drawText(scene, "NATIVE PREVIEW ONLY", 18, kScreenHeight - 38, footerScale, white);
     }
 
     if (gMenuSettings.showControlHints) {
