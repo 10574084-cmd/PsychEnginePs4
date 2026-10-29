@@ -23,7 +23,7 @@ jobs:
           submodules: recursive
 
       - name: Set up Haxe used by Psych Engine 0.6.3
-        uses: krdlab/setup-haxe@master
+        uses: krdlab/setup-haxe@v2
         with:
           haxe-version: 4.2.5
 
