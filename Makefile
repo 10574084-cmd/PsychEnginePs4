@@ -12,7 +12,7 @@ OUT_OELF := $(INTDIR)/psychengine_ps4_bootstrap.oelf
 PKG := $(CONTENT_ID).pkg
 MENU_ASSETS := $(wildcard assets/psychmenu/*.png)
 
-LIBS := -lc -lkernel -lc++ -lpthread -lSceVideoOut -lScePad -lSceUserService -lSceAudioOut
+LIBS := -lc -lkernel -lc++ -lSceVideoOut -lScePad -lSceUserService -lSceAudioOut
 OBJS := $(INTDIR)/main.o $(INTDIR)/graphics.o $(INTDIR)/ps4png.o $(INTDIR)/audio_player.o $(INTDIR)/stb_vorbis.o
 TARGET_FLAGS := --target=x86_64-pc-freebsd12-elf -fPIC -funwind-tables -c -isysroot $(TOOLCHAIN) -isystem $(TOOLCHAIN)/include
 CXXFLAGS := $(TARGET_FLAGS) -isystem $(TOOLCHAIN)/include/c++/v1 -I$(COMMONDIR) -Isrc
