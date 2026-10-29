@@ -66,7 +66,27 @@ jobs:
             echo "Required before a real PKG: implement a PS4 runtime/backend, port or replace the Haxe/Lime/OpenFL runtime dependencies, compile with a PS4 toolchain, then package and test on compatible hardware."
           } | tee dist/PORT-FEASIBILITY.txt
 
-          git archive --format=zip --prefix=PsychEnginePs4/ HEAD -o dist/PsychEnginePs4-source.zip
+          # git archive omits gitlink contents, so explicitly add the pinned engine source.
+          mkdir -p dist/source-snapshot/vendor
+          git archive HEAD | tar -x -C dist/source-snapshot
+          cp -a vendor/PsychEngine dist/source-snapshot/vendor/PsychEngine
+          rm -f dist/source-snapshot/vendor/PsychEngine/.git
+          python3 - <<'PY'
+          from pathlib import Path
+          from zipfile import ZIP_DEFLATED, ZipFile
+
+          root = Path("dist/source-snapshot")
+          archive_path = Path("dist/PsychEnginePs4-source.zip")
+          with ZipFile(archive_path, "w", compression=ZIP_DEFLATED, compresslevel=1) as archive:
+              for path in root.rglob("*"):
+                  if not path.is_file():
+                      continue
+                  if ".git" in path.parts:
+                      continue
+                  archive.write(path, path.relative_to(root.parent).as_posix())
+          print(f"Created source archive with pinned upstream source: {archive_path} ({archive_path.stat().st_size} bytes)")
+          PY
+          test -s dist/PsychEnginePs4-source.zip
           cat > dist/BUILD-STATUS.txt <<'EOF'
           PsychEnginePs4 build status
           This workflow audits the official Psych Engine source against this experimental port scaffold.
