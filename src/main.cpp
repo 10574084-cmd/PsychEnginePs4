@@ -276,14 +276,14 @@ bool jsonBooleanInObject(const std::string &json, size_t objectStart, size_t obj
     if (keyAt == std::string::npos) return false;
     const size_t colon = object.find(':', keyAt + token.size());
     if (colon == std::string::npos) return false;
-    const size_t valueAt = object.find_first_not_of(" \\t\\r\\n", colon + 1);
+    const size_t valueAt = object.find_first_not_of(" \\t\\r\n", colon + 1);
     return valueAt != std::string::npos && object.compare(valueAt, 4, "true") == 0;
 }
 
 int parseNumericRow(const std::string &row, double values[3]) {
     const char *cursor = row.c_str();
     int parsed = 0;
-    while (*cursor != '\\0' && parsed < 3) {
+    while (*cursor != '\0' && parsed < 3) {
         while (std::isspace(static_cast<unsigned char>(*cursor)) || *cursor == ',') ++cursor;
         char *end = nullptr;
         const double value = strtod(cursor, &end);
@@ -419,6 +419,11 @@ void readSongChartMetadata(InstalledSong &song) {
         folderPath + "/" + song.folder + "-hard.json"
     });
 
+    if (song.normalChartPath.empty() && !song.defaultChartPath.empty() &&
+        (!song.easyChartPath.empty() || !song.hardChartPath.empty())) {
+        song.normalChartPath = song.defaultChartPath;
+    }
+
     const bool hasSeparateDifficulties = !song.easyChartPath.empty() ||
         !song.normalChartPath.empty() || !song.hardChartPath.empty();
     song.difficultyCount = (!song.easyChartPath.empty() ? 1 : 0) +
@@ -459,7 +464,7 @@ const char *songDifficultyName(const InstalledSong &song) {
     if (song.selectedDifficulty == 0) return "DIFFICULTY EASY";
     if (song.selectedDifficulty == 1) return "DIFFICULTY NORMAL";
     if (song.selectedDifficulty == 2) return "DIFFICULTY HARD";
-    return "DIFFICULTY DEFAULT";
+    return song.defaultChartPath.empty() ? "DIFFICULTY DEFAULT" : "DIFFICULTY NORMAL";
 }
 
 std::string readableSongName(const std::string &folder) {
@@ -478,14 +483,14 @@ void appendSongsFromRoot(std::vector<InstalledSong> &songs,
                          const std::string &chartRoot) {
     DIR *directory = opendir(songRoot.c_str());
     if (!directory) {
-        printf("Freeplay: song root not available: %s\\n", songRoot.c_str());
+        printf("Freeplay: song root not available: %s\n", songRoot.c_str());
         return;
     }
 
     struct dirent *entry = nullptr;
     while ((entry = readdir(directory)) != nullptr && songs.size() < 128) {
         const char *name = entry->d_name;
-        if (!name || name[0] == '.' || name[0] == '\\0') continue;
+        if (!name || name[0] == '.' || name[0] == '\0') continue;
         const std::string folder(name);
         const auto existing = std::find_if(songs.begin(), songs.end(),
             [&folder](const InstalledSong &song) { return song.folder == folder; });
@@ -523,7 +528,7 @@ std::vector<InstalledSong> scanInstalledSongs() {
     std::sort(songs.begin(), songs.end(), [](const InstalledSong &a, const InstalledSong &b) {
         return a.displayName < b.displayName;
     });
-    printf("Freeplay: found %u song folders (bundled + custom).\\n",
+    printf("Freeplay: found %u song folders (bundled + custom).\n",
            static_cast<unsigned>(songs.size()));
     return songs;
 }
@@ -589,7 +594,7 @@ void drawFreeplayDetails(Scene2D *scene, Ps4Image &background, const InstalledSo
     drawCenteredText(scene, noteLine, 575, 4, white);
     drawCenteredText(scene, difficultyLine, 625, 4, white);
     drawCenteredText(scene, song.hasChart && !song.notes.empty() ? "CROSS STARTS CHART PLAYTEST" :
-        (song.hasInstrumental ? "TRIANGLE PLAYS INSTRUMENTAL" : "NO CHART OR AUDIO FOUND"),
+        (song.hasInstrumental ? "TRIANGLE PREVIEWS FULL SONG" : "NO CHART OR AUDIO FOUND"),
         680, 3, gAudioPlayer.isPlaying() ? white : muted);
     drawCenteredText(scene, "LEFT RIGHT CHANGE DIFFICULTY", 735, 3, white);
     drawCenteredText(scene, "SQUARE STOPS AUDIO PREVIEW", 770, 3, white);
@@ -695,7 +700,7 @@ void startGameplay(InstalledSong &song) {
     gGameplay.hits = 0;
     gGameplay.misses = 0;
     if (song.hasInstrumental && !gAudioPlayer.play(song.instrumentalPath, song.voicesPath))
-        printf("Gameplay audio unavailable: %s\\n", gAudioPlayer.lastError());
+        printf("Gameplay audio unavailable: %s\n", gAudioPlayer.lastError());
     gGameplay.startedAt = std::chrono::steady_clock::now();
 }
 
@@ -993,7 +998,7 @@ int main() {
                 if (pressed & ORBIS_PAD_BUTTON_TRIANGLE) {
                     if (song.hasInstrumental) {
                         if (!gAudioPlayer.play(song.instrumentalPath, song.voicesPath))
-                            printf("Audio preview failed: %s\\n", gAudioPlayer.lastError());
+                            printf("Audio preview failed: %s\n", gAudioPlayer.lastError());
                     } else {
                         gInstalledSongs = scanInstalledSongs();
                         freeplaySelectedIndex = std::min(freeplaySelectedIndex,
@@ -1006,7 +1011,7 @@ int main() {
                         page = SubPage::Gameplay;
                     } else if (song.hasInstrumental &&
                                !gAudioPlayer.play(song.instrumentalPath, song.voicesPath)) {
-                        printf("Audio preview failed: %s\\n", gAudioPlayer.lastError());
+                        printf("Audio preview failed: %s\n", gAudioPlayer.lastError());
                     }
                 }
             }

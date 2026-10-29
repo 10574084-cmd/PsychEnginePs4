@@ -81,7 +81,7 @@ bool AudioPlayer::play(const std::string &instrumentalPath, const std::string &v
     if (!voicesPath.empty()) {
         std::string voicesError;
         if (!decodeOggToStereo(voicesPath, voices, voicesError)) {
-            printf("Audio: %s\\n", voicesError.c_str());
+            printf("Audio: %s\n", voicesError.c_str());
             voices.clear();
         }
     }

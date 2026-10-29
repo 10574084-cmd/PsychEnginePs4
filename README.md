@@ -13,8 +13,8 @@ Experimental project investigating a native PlayStation 4 homebrew port of **Fri
 - `tools/patch_openorbis_graphics.py` adds fast alpha-aware image blitting to the OpenOrbis sample renderer, so transparent button art overlays the background correctly.
 - D-pad Up/Down changes the selected item; Cross opens a page and Circle returns to the main menu.
 - **Options is now an interactive native PS4 submenu**: toggle version labels, toggle controller hints, toggle the original background, and restore defaults. Preferences are saved to `/data/PSYH00001/menu_settings.cfg` when the console permits writes.
-- **Freeplay includes stock FNF songs and custom songs**. CI downloads the 0.6.3 stock audio and chart files into the PKG; user folders under `/data/PSYH00001/songs` take priority over bundled songs with the same folder name.
-- Instrumental and vocal OGG tracks are decoded, mixed, and sent to the PS4 audio output; chart playback remains experimental.
+- **Freeplay includes 21 stock FNF songs and custom songs**. CI downloads the 0.6.3 audio and chart files into the PKG; user folders under `/data/PSYH00001/songs` take priority over bundled songs with the same folder name.
+- Instrumental and vocal OGG tracks are decoded, mixed, and sent to PS4 audio output; chart playback remains experimental.
 - A native OGG instrumental-preview path decodes audio to stereo PCM and submits it to the PS4 audio output API on a worker thread; hardware playback still needs to be confirmed.
 - Freeplay now extracts player note rows from chart sections and has an experimental four-lane chart playtest with timing-based hits, misses, a score, and a results screen.
 - The main menu labels the build as Psych Engine PS4 BETA and identifies the Psych Engine 0.6.3 asset base.
@@ -41,4 +41,4 @@ A green CI build confirms the compile and packaging steps succeeded. It does **n
 6. Integrate song charts, characters, stages, Lua/mod support, and asset loading.
 7. Validate gameplay on compatible PS4 homebrew hardware before calling the port playable.
 
-This is an independent community project and is not affiliated with Sony or the original Psych Engine developers. The menu assets are retrieved from the upstream Psych Engine 0.6.3 source tree during CI.
+This is an independent community project and is not affiliated with Sony or the original Psych Engine developers. The menu, stock song audio, charts, and license are retrieved from the upstream Psych Engine 0.6.3 source tree during CI.
