@@ -8,6 +8,8 @@ on:
       - 'src/**'
       - 'tools/**'
       - 'sce_sys/**'
+      - 'vendor/**'
+      - '.gitmodules'
   workflow_dispatch:
 permissions:
   contents: read
@@ -175,7 +177,7 @@ jobs:
       - name: Upload bootstrap test artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: PsychEnginePs4-original-menu-v0.2
+          name: PsychEnginePs4-native-preview-v0.2
           path: |
             IV0000-PSYH00001_00-PSYCHENG00000000.pkg
             eboot.bin
