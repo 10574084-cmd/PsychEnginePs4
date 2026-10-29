@@ -8,6 +8,7 @@
 #include <vector>
 #include <algorithm>
 #include <cctype>
+#include <cstdlib>
 #include <sys/stat.h>
 
 #include <orbis/Pad.h>
@@ -167,6 +168,9 @@ struct InstalledSong {
     bool hasChart = false;
     bool hasInstrumental = false;
     bool hasVoices = false;
+    std::string chartPath;
+    double bpm = 0.0;
+    int noteCount = 0;
 };
 std::vector<InstalledSong> gInstalledSongs;
 
@@ -175,6 +179,90 @@ bool pathExists(const std::string &path) {
     if (!file) return false;
     fclose(file);
     return true;
+}
+
+std::string readTextFile(const std::string &path) {
+    FILE *file = fopen(path.c_str(), "rb");
+    if (!file) return std::string();
+    if (fseek(file, 0, SEEK_END) != 0) { fclose(file); return std::string(); }
+    const long length = ftell(file);
+    if (length <= 0 || length > 8 * 1024 * 1024 || fseek(file, 0, SEEK_SET) != 0) {
+        fclose(file);
+        return std::string();
+    }
+    std::string result(static_cast<size_t>(length), '\\0');
+    const size_t read = fread(&result[0], 1, result.size(), file);
+    fclose(file);
+    result.resize(read);
+    return result;
+}
+
+double readJsonNumberForKey(const std::string &json, const char *key) {
+    const std::string token = std::string("\\\"") + key + "\\\"";
+    const size_t keyAt = json.find(token);
+    if (keyAt == std::string::npos) return 0.0;
+    const size_t colon = json.find(':', keyAt + token.size());
+    if (colon == std::string::npos) return 0.0;
+    const char *begin = json.c_str() + colon + 1;
+    while (*begin == ' ' || *begin == '\\t' || *begin == '\\r' || *begin == '\\n') ++begin;
+    char *end = nullptr;
+    const double value = strtod(begin, &end);
+    return end == begin || value < 0.0 ? 0.0 : value;
+}
+
+int countChartNoteEntries(const std::string &json) {
+    const std::string token = "\\\"sectionNotes\\\"";
+    const size_t keyAt = json.find(token);
+    if (keyAt == std::string::npos) return 0;
+    const size_t colon = json.find(':', keyAt + token.size());
+    if (colon == std::string::npos) return 0;
+    const size_t start = json.find('[', colon + 1);
+    if (start == std::string::npos) return 0;
+
+    int depth = 0;
+    int notes = 0;
+    bool inString = false;
+    bool escaped = false;
+    for (size_t i = start; i < json.size(); ++i) {
+        const char ch = json[i];
+        if (inString) {
+            if (escaped) escaped = false;
+            else if (ch == '\\\\') escaped = true;
+            else if (ch == '"') inString = false;
+            continue;
+        }
+        if (ch == '"') {
+            inString = true;
+        } else if (ch == '[') {
+            if (depth == 1) ++notes;
+            ++depth;
+        } else if (ch == ']') {
+            --depth;
+            if (depth <= 0) break;
+        }
+    }
+    return notes;
+}
+
+void readSongChartMetadata(InstalledSong &song) {
+    const std::string folderPath = std::string(kSongDirectory) + "/" + song.folder;
+    const std::string namedChart = folderPath + "/" + song.folder + ".json";
+    const std::string genericChart = folderPath + "/chart.json";
+    if (pathExists(namedChart)) song.chartPath = namedChart;
+    else if (pathExists(genericChart)) song.chartPath = genericChart;
+    if (song.chartPath.empty()) {
+        song.hasChart = false;
+        return;
+    }
+
+    const std::string json = readTextFile(song.chartPath);
+    if (json.empty()) {
+        song.hasChart = false;
+        return;
+    }
+    song.hasChart = true;
+    song.bpm = readJsonNumberForKey(json, "bpm");
+    song.noteCount = countChartNoteEntries(json);
 }
 
 std::string readableSongName(const std::string &folder) {
@@ -208,7 +296,7 @@ std::vector<InstalledSong> scanInstalledSongs() {
         InstalledSong song;
         song.folder = folder;
         song.displayName = readableSongName(folder);
-        song.hasChart = pathExists(base + "/chart.json") || pathExists(base + "/" + folder + ".json");
+        readSongChartMetadata(song);
         song.hasInstrumental = pathExists(base + "/Inst.ogg") || pathExists(base + "/inst.ogg");
         song.hasVoices = pathExists(base + "/Voices.ogg") || pathExists(base + "/voices.ogg");
         songs.push_back(song);
@@ -270,8 +358,15 @@ void drawFreeplayDetails(Scene2D *scene, Ps4Image &background, const InstalledSo
     drawCenteredText(scene, song.hasChart ? "CHART FILE DETECTED" : "CHART FILE MISSING", 345, 5, song.hasChart ? white : muted);
     drawCenteredText(scene, song.hasInstrumental ? "INSTRUMENTAL FILE DETECTED" : "INST OGG MISSING", 415, 4, song.hasInstrumental ? white : muted);
     drawCenteredText(scene, song.hasVoices ? "VOCAL TRACK DETECTED" : "NO VOCAL TRACK", 475, 4, muted);
-    drawCenteredText(scene, "FILES ARE DISCOVERED BUT NOT PLAYABLE YET", 590, 4, white);
-    drawCenteredText(scene, "AUDIO AND NOTE PLAYBACK RUNTIME IS NEXT", 650, 3, muted);
+    char bpmLine[48];
+    char noteLine[48];
+    if (song.bpm > 0.0) snprintf(bpmLine, sizeof(bpmLine), "BPM %.0f", song.bpm);
+    else snprintf(bpmLine, sizeof(bpmLine), "BPM UNKNOWN");
+    snprintf(noteLine, sizeof(noteLine), "CHART NOTES %d", song.noteCount);
+    drawCenteredText(scene, bpmLine, 535, 4, white);
+    drawCenteredText(scene, noteLine, 585, 4, white);
+    drawCenteredText(scene, "FILES DETECTED BUT GAMEPLAY IS NOT READY", 660, 3, muted);
+    drawCenteredText(scene, "AUDIO AND NOTE PLAYBACK RUNTIME IS NEXT", 705, 3, muted);
     drawCenteredText(scene, "CIRCLE BACK TO SONG LIST", 805, 4, white);
 }
 

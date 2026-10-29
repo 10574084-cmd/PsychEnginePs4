@@ -13,7 +13,7 @@ Experimental project investigating a native PlayStation 4 homebrew port of **Fri
 - `tools/patch_openorbis_graphics.py` adds fast alpha-aware image blitting to the OpenOrbis sample renderer, so transparent button art overlays the background correctly.
 - D-pad Up/Down changes the selected item; Cross opens a page and Circle returns to the main menu.
 - **Options is now an interactive native PS4 submenu**: toggle version labels, toggle controller hints, toggle the original background, and restore defaults. Preferences are saved to `/data/PSYH00001/menu_settings.cfg` when the console permits writes.
-- **Freeplay scans custom-song folders** under `/data/PSYH00001/songs`, lists chart/instrumental availability, and opens a song-details page. Chart parsing and playback are not integrated yet.
+- **Freeplay scans custom-song folders** under `/data/PSYH00001/songs`, detects charts and audio files, and reads chart BPM plus note-entry count from a chart's `sectionNotes` arrays. Audio playback and note rendering are not integrated yet.
 - The main menu labels the build as Psych Engine PS4 BETA and identifies the Psych Engine 0.6.3 asset base.
 - The native bootstrap Makefile links the OpenOrbis video, controller, and user-service libraries.
 - `.github/workflows/ps4-bootstrap.yml` fetches the matching original 0.6.3 menu assets, validates the icon, bundles runtime modules, and builds the experimental PKG.
@@ -24,14 +24,14 @@ Open **Actions → PsychEnginePs4 native bootstrap** and download `PsychEnginePs
 
 ## Current limitations
 
-The main menu's look and button sprites are based on the original Psych Engine 0.6.3 assets, but this is a native recreation of the menu layout—not the original Haxe code running on PS4. Options has real menu-level toggles and Freeplay can browse song folders under `/data/PSYH00001/songs`. Each folder should contain `chart.json` or `<folder-name>.json`, plus `Inst.ogg` for the instrumental. The details page only reports which files are present; chart parsing, audio playback, note rendering, gameplay, and mod execution are **not implemented**. Story Mode, Mods, Awards, Credits, and Donate remain placeholders.
+The main menu's look and button sprites are based on the original Psych Engine 0.6.3 assets, but this is a native recreation of the menu layout—not the original Haxe code running on PS4. Options has real menu-level toggles and Freeplay can browse song folders under `/data/PSYH00001/songs`. Each folder should contain `chart.json` or `<folder-name>.json`, plus `Inst.ogg` for the instrumental. The details page also extracts BPM and the number of note entries from `sectionNotes`, but it does not parse note timing into a playable chart. Audio playback, note rendering, gameplay, and mod execution are **not implemented**. Story Mode, Mods, Awards, Credits, and Donate remain placeholders.
 
 A green CI build confirms the compile and packaging steps succeeded. It does **not** prove that the PKG launches on a physical PS4; the new menu still needs to be tested on the console.
 
 ## Milestones
 
 1. Validate original-menu rendering and controller navigation on compatible PS4 homebrew hardware.
-2. Expand native Freeplay to parse chart metadata and difficulty information.
+2. Expand native Freeplay to resolve difficulties and validate chart schema.
 3. Implement audio decoding/mixing and note-timing/rendering primitives.
 4. Decide how to adapt or replace the Haxe/OpenFL/Lime runtime.
 5. Integrate song charts, characters, stages, Lua/mod support, and asset loading.
