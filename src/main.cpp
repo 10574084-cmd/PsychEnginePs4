@@ -3,6 +3,11 @@
 #include <string.h>
 #include <sstream>
 #include <cmath>
+#include <dirent.h>
+#include <string>
+#include <vector>
+#include <algorithm>
+#include <cctype>
 #include <sys/stat.h>
 
 #include <orbis/Pad.h>
@@ -135,6 +140,7 @@ enum class SubPage {
     None,
     Story,
     Freeplay,
+    FreeplayDetails,
     Mods,
     Awards,
     Credits,
@@ -152,6 +158,123 @@ MenuSettings gMenuSettings;
 constexpr const char *kSettingsDirectory = "/data/PSYH00001";
 constexpr const char *kSettingsPath = "/data/PSYH00001/menu_settings.cfg";
 constexpr int kOptionsCount = 5;
+constexpr const char *kSongDirectory = "/data/PSYH00001/songs";
+constexpr int kFreeplayVisibleRows = 7;
+
+struct InstalledSong {
+    std::string folder;
+    std::string displayName;
+    bool hasChart = false;
+    bool hasInstrumental = false;
+    bool hasVoices = false;
+};
+std::vector<InstalledSong> gInstalledSongs;
+
+bool pathExists(const std::string &path) {
+    FILE *file = fopen(path.c_str(), "rb");
+    if (!file) return false;
+    fclose(file);
+    return true;
+}
+
+std::string readableSongName(const std::string &folder) {
+    std::string result;
+    result.reserve(folder.size());
+    for (unsigned char ch : folder) {
+        if (ch == '_' || ch == '-') result.push_back(' ');
+        else if (std::isalnum(ch)) result.push_back(static_cast<char>(std::toupper(ch)));
+        else if (ch == ' ') result.push_back(' ');
+    }
+    return result.empty() ? "UNTITLED SONG" : result;
+}
+
+std::vector<InstalledSong> scanInstalledSongs() {
+    std::vector<InstalledSong> songs;
+    mkdir(kSettingsDirectory, 0777);
+    mkdir(kSongDirectory, 0777);
+    DIR *directory = opendir(kSongDirectory);
+    if (!directory) {
+        printf("Freeplay: could not open %s\\n", kSongDirectory);
+        return songs;
+    }
+    struct dirent *entry = nullptr;
+    while ((entry = readdir(directory)) != nullptr && songs.size() < 128) {
+        const char *name = entry->d_name;
+        if (!name || name[0] == '.' || name[0] == '\\0') continue;
+        const std::string folder(name);
+        const std::string base = std::string(kSongDirectory) + "/" + folder;
+        struct stat info;
+        if (stat(base.c_str(), &info) != 0 || !S_ISDIR(info.st_mode)) continue;
+        InstalledSong song;
+        song.folder = folder;
+        song.displayName = readableSongName(folder);
+        song.hasChart = pathExists(base + "/chart.json") || pathExists(base + "/" + folder + ".json");
+        song.hasInstrumental = pathExists(base + "/Inst.ogg") || pathExists(base + "/inst.ogg");
+        song.hasVoices = pathExists(base + "/Voices.ogg") || pathExists(base + "/voices.ogg");
+        songs.push_back(song);
+    }
+    closedir(directory);
+    std::sort(songs.begin(), songs.end(), [](const InstalledSong &a, const InstalledSong &b) {
+        return a.displayName < b.displayName;
+    });
+    printf("Freeplay: found %u song folders.\\n", static_cast<unsigned>(songs.size()));
+    return songs;
+}
+
+void drawFreeplay(Scene2D *scene, Ps4Image &background, int selectedIndex) {
+    if (gMenuSettings.showMenuBackground) background.Draw(scene, 0, 0);
+    else scene->DrawRectangle(0, 0, kScreenWidth, kScreenHeight, {13, 16, 31});
+    const Color panel = {22, 20, 32}, accent = {239, 45, 71};
+    const Color white = {255, 255, 255}, muted = {175, 171, 190};
+    const Color rowFill = {32, 29, 43}, rowEdge = {70, 65, 82};
+    drawPanel(scene, 220, 85, 1480, 910, panel, accent, 5);
+    drawCenteredText(scene, "FREEPLAY", 125, 9, white);
+    drawCenteredText(scene, "CUSTOM SONG FILE BROWSER", 205, 4, muted);
+    if (gInstalledSongs.empty()) {
+        drawCenteredText(scene, "NO SONG FOLDERS FOUND", 395, 6, white);
+        drawCenteredText(scene, "ADD SONG FOLDERS TO DATA PSYH00001 SONGS", 500, 3, muted);
+        drawCenteredText(scene, "EACH FOLDER NEEDS A CHART JSON FILE", 555, 3, muted);
+        drawCenteredText(scene, "INST OGG IS REQUIRED FOR FUTURE PLAYBACK", 610, 3, muted);
+        drawCenteredText(scene, "PRESS CIRCLE TO RETURN", 865, 4, white);
+        return;
+    }
+    const int maxIndex = static_cast<int>(gInstalledSongs.size()) - 1;
+    selectedIndex = std::max(0, std::min(selectedIndex, maxIndex));
+    const int first = selectedIndex >= kFreeplayVisibleRows
+        ? selectedIndex - kFreeplayVisibleRows + 1 : 0;
+    const int last = std::min(static_cast<int>(gInstalledSongs.size()), first + kFreeplayVisibleRows);
+    for (int i = first; i < last; ++i) {
+        const InstalledSong &song = gInstalledSongs[static_cast<size_t>(i)];
+        const int rowY = 300 + (i - first) * 82;
+        const bool selected = i == selectedIndex;
+        drawPanel(scene, 340, rowY, 1240, 64, rowFill, selected ? accent : rowEdge, selected ? 4 : 2);
+        const std::string label = song.displayName.substr(0, 25);
+        drawText(scene, label.c_str(), 375, rowY + 22, 4, selected ? white : muted);
+        drawText(scene, song.hasChart ? "CHART OK" : "NO CHART", 1110, rowY + 10, 3, song.hasChart ? white : muted);
+        drawText(scene, song.hasInstrumental ? "INST OK" : "NO INST", 1110, rowY + 37, 3, song.hasInstrumental ? white : muted);
+    }
+    char countLine[48];
+    snprintf(countLine, sizeof(countLine), "SONGS FOUND: %u", static_cast<unsigned>(gInstalledSongs.size()));
+    drawText(scene, countLine, 345, 910, 3, muted);
+    drawCenteredText(scene, "UP DOWN SELECT  X DETAILS  O BACK", 950, 3, white);
+}
+
+void drawFreeplayDetails(Scene2D *scene, Ps4Image &background, const InstalledSong &song) {
+    if (gMenuSettings.showMenuBackground) background.Draw(scene, 0, 0);
+    else scene->DrawRectangle(0, 0, kScreenWidth, kScreenHeight, {13, 16, 31});
+    const Color panel = {22, 20, 32}, accent = {239, 45, 71};
+    const Color white = {255, 255, 255}, muted = {190, 186, 202};
+    drawPanel(scene, 280, 155, 1360, 770, panel, accent, 5);
+    const std::string title = song.displayName.substr(0, 25);
+    drawCenteredText(scene, title.c_str(), 220, 8, white);
+    drawCenteredText(scene, song.hasChart ? "CHART FILE DETECTED" : "CHART FILE MISSING", 345, 5, song.hasChart ? white : muted);
+    drawCenteredText(scene, song.hasInstrumental ? "INSTRUMENTAL FILE DETECTED" : "INST OGG MISSING", 415, 4, song.hasInstrumental ? white : muted);
+    drawCenteredText(scene, song.hasVoices ? "VOCAL TRACK DETECTED" : "NO VOCAL TRACK", 475, 4, muted);
+    drawCenteredText(scene, "FILES ARE DISCOVERED BUT NOT PLAYABLE YET", 590, 4, white);
+    drawCenteredText(scene, "AUDIO AND NOTE PLAYBACK RUNTIME IS NEXT", 650, 3, muted);
+    drawCenteredText(scene, "CIRCLE BACK TO SONG LIST", 805, 4, white);
+}
+
 
 void loadMenuSettings() {
     FILE *file = fopen(kSettingsPath, "r");
@@ -379,6 +502,7 @@ int main() {
     uint32_t previousButtons = 0;
     int selectedIndex = 0;
     int optionsSelectedIndex = 0;
+    int freeplaySelectedIndex = 0;
     SubPage page = SubPage::None;
     int frameId = 0;
 
@@ -405,7 +529,11 @@ int main() {
             if (pressed & ORBIS_PAD_BUTTON_CROSS) {
                 switch (selectedIndex) {
                     case 0: page = SubPage::Story; break;
-                    case 1: page = SubPage::Freeplay; break;
+                    case 1:
+                        gInstalledSongs = scanInstalledSongs();
+                        freeplaySelectedIndex = 0;
+                        page = SubPage::Freeplay;
+                        break;
                     case 2: page = SubPage::Mods; break;
                     case 3: page = SubPage::Awards; break;
                     case 4: page = SubPage::Credits; break;
@@ -416,6 +544,24 @@ int main() {
                         break;
                 }
             }
+        } else if (page == SubPage::Freeplay) {
+            if (!gInstalledSongs.empty()) {
+                const int count = static_cast<int>(gInstalledSongs.size());
+                if (pressed & ORBIS_PAD_BUTTON_UP) freeplaySelectedIndex = (freeplaySelectedIndex + count - 1) % count;
+                if (pressed & ORBIS_PAD_BUTTON_DOWN) freeplaySelectedIndex = (freeplaySelectedIndex + 1) % count;
+                if (pressed & ORBIS_PAD_BUTTON_CROSS) page = SubPage::FreeplayDetails;
+            }
+            if (pressed & ORBIS_PAD_BUTTON_TRIANGLE) {
+                gInstalledSongs = scanInstalledSongs();
+                freeplaySelectedIndex = 0;
+            }
+            if (pressed & ORBIS_PAD_BUTTON_CIRCLE) page = SubPage::None;
+        } else if (page == SubPage::FreeplayDetails) {
+            if (pressed & ORBIS_PAD_BUTTON_CROSS) {
+                gInstalledSongs = scanInstalledSongs();
+                page = SubPage::Freeplay;
+                freeplaySelectedIndex = std::min(freeplaySelectedIndex, std::max(0, static_cast<int>(gInstalledSongs.size()) - 1));
+            } else if (pressed & ORBIS_PAD_BUTTON_CIRCLE) page = SubPage::Freeplay;
         } else if (page == SubPage::Options) {
             if (pressed & ORBIS_PAD_BUTTON_UP) {
                 optionsSelectedIndex = (optionsSelectedIndex + kOptionsCount - 1) % kOptionsCount;
@@ -462,6 +608,14 @@ int main() {
 
         if (page == SubPage::None) {
             drawMainMenu(scene, background, items, itemCount, selectedIndex);
+        } else if (page == SubPage::Freeplay) {
+            drawFreeplay(scene, background, freeplaySelectedIndex);
+        } else if (page == SubPage::FreeplayDetails && !gInstalledSongs.empty()) {
+            const int detailIndex = std::max(0, std::min(freeplaySelectedIndex, static_cast<int>(gInstalledSongs.size()) - 1));
+            drawFreeplayDetails(scene, background, gInstalledSongs[static_cast<size_t>(detailIndex)]);
+        } else if (page == SubPage::FreeplayDetails) {
+            page = SubPage::Freeplay;
+            drawFreeplay(scene, background, freeplaySelectedIndex);
         } else if (page == SubPage::Options) {
             drawOptions(scene, background, optionsSelectedIndex);
         } else {
