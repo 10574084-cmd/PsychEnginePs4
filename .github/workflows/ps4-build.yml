@@ -67,10 +67,10 @@ jobs:
           } | tee dist/PORT-FEASIBILITY.txt
 
           # git archive omits gitlink contents, so explicitly add the pinned engine source.
-          mkdir -p dist/source-snapshot/vendor
+          mkdir -p dist/source-snapshot/PsychEnginePs4/vendor
           git archive HEAD | tar -x -C dist/source-snapshot
-          cp -a vendor/PsychEngine dist/source-snapshot/vendor/PsychEngine
-          rm -f dist/source-snapshot/vendor/PsychEngine/.git
+          cp -a vendor/PsychEngine dist/source-snapshot/PsychEnginePs4/vendor/PsychEngine
+          rm -f dist/source-snapshot/PsychEnginePs4/vendor/PsychEngine/.git
           python3 - <<'PY'
           from pathlib import Path
           from zipfile import ZIP_DEFLATED, ZipFile
@@ -83,7 +83,7 @@ jobs:
                       continue
                   if ".git" in path.parts:
                       continue
-                  archive.write(path, path.relative_to(root.parent).as_posix())
+                  archive.write(path, path.relative_to(root).as_posix())
           print(f"Created source archive with pinned upstream source: {archive_path} ({archive_path.stat().st_size} bytes)")
           PY
           test -s dist/PsychEnginePs4-source.zip
