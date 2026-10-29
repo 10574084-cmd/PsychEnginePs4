@@ -16,6 +16,7 @@
 
 #include "graphics.h"
 #include "ps4png.h"
+#include "audio_player.h"
 
 std::stringstream debugLogStream;
 
@@ -166,6 +167,7 @@ constexpr int kFreeplayVisibleRows = 7;
 struct InstalledSong {
     std::string folder;
     std::string displayName;
+    std::string instrumentalPath;
     bool hasChart = false;
     bool hasInstrumental = false;
     bool hasVoices = false;
@@ -181,6 +183,7 @@ struct InstalledSong {
 
 };
 std::vector<InstalledSong> gInstalledSongs;
+AudioPlayer gAudioPlayer;
 
 bool pathExists(const std::string &path) {
     FILE *file = fopen(path.c_str(), "rb");
@@ -390,7 +393,8 @@ std::vector<InstalledSong> scanInstalledSongs() {
         song.folder = folder;
         song.displayName = readableSongName(folder);
         readSongChartMetadata(song);
-        song.hasInstrumental = pathExists(base + "/Inst.ogg") || pathExists(base + "/inst.ogg");
+        song.instrumentalPath = firstExistingPath({base + "/Inst.ogg", base + "/inst.ogg"});
+        song.hasInstrumental = !song.instrumentalPath.empty();
         song.hasVoices = pathExists(base + "/Voices.ogg") || pathExists(base + "/voices.ogg");
         songs.push_back(song);
     }
@@ -462,8 +466,11 @@ void drawFreeplayDetails(Scene2D *scene, Ps4Image &background, const InstalledSo
     drawCenteredText(scene, bpmLine, 525, 4, white);
     drawCenteredText(scene, noteLine, 575, 4, white);
     drawCenteredText(scene, difficultyLine, 625, 4, white);
-    drawCenteredText(scene, "FILES DETECTED BUT GAMEPLAY IS NOT READY", 680, 3, muted);
-    drawCenteredText(scene, "LEFT RIGHT CHANGE DIFFICULTY", 755, 3, white);
+    drawCenteredText(scene, gAudioPlayer.isPlaying() ? "INSTRUMENTAL PREVIEW PLAYING" :
+        (song.hasInstrumental ? "PRESS X TO PLAY INSTRUMENTAL" : "NO INSTRUMENTAL PREVIEW FOUND"),
+        680, 3, gAudioPlayer.isPlaying() ? white : muted);
+    drawCenteredText(scene, "LEFT RIGHT CHANGE DIFFICULTY", 735, 3, white);
+    drawCenteredText(scene, "SQUARE STOPS AUDIO PREVIEW", 770, 3, white);
     drawCenteredText(scene, "CIRCLE BACK TO SONG LIST", 805, 4, white);
 }
 
@@ -752,18 +759,26 @@ int main() {
             if (!gInstalledSongs.empty()) {
                 const int detailIndex = std::max(0, std::min(freeplaySelectedIndex,
                     static_cast<int>(gInstalledSongs.size()) - 1));
-                if (pressed & ORBIS_PAD_BUTTON_LEFT)
-                    changeSongDifficulty(gInstalledSongs[static_cast<size_t>(detailIndex)], -1);
-                if (pressed & ORBIS_PAD_BUTTON_RIGHT)
-                    changeSongDifficulty(gInstalledSongs[static_cast<size_t>(detailIndex)], 1);
+                InstalledSong &song = gInstalledSongs[static_cast<size_t>(detailIndex)];
+                if (pressed & ORBIS_PAD_BUTTON_LEFT) changeSongDifficulty(song, -1);
+                if (pressed & ORBIS_PAD_BUTTON_RIGHT) changeSongDifficulty(song, 1);
                 if (pressed & ORBIS_PAD_BUTTON_TRIANGLE) {
                     gInstalledSongs = scanInstalledSongs();
                     freeplaySelectedIndex = std::min(freeplaySelectedIndex,
                         std::max(0, static_cast<int>(gInstalledSongs.size()) - 1));
                 }
+                if (pressed & ORBIS_PAD_BUTTON_CROSS) {
+                    if (song.hasInstrumental) {
+                        if (!gAudioPlayer.play(song.instrumentalPath))
+                            printf("Audio preview failed: %s\\n", gAudioPlayer.lastError());
+                    }
+                }
             }
-            if (pressed & ORBIS_PAD_BUTTON_CROSS) page = SubPage::Freeplay;
-            else if (pressed & ORBIS_PAD_BUTTON_CIRCLE) page = SubPage::Freeplay;
+            if (pressed & ORBIS_PAD_BUTTON_SQUARE) gAudioPlayer.stop();
+            if (pressed & ORBIS_PAD_BUTTON_CIRCLE) {
+                gAudioPlayer.stop();
+                page = SubPage::Freeplay;
+            }
         } else if (page == SubPage::Options) {
             if (pressed & ORBIS_PAD_BUTTON_UP) {
                 optionsSelectedIndex = (optionsSelectedIndex + kOptionsCount - 1) % kOptionsCount;

@@ -12,8 +12,8 @@ OUT_OELF := $(INTDIR)/psychengine_ps4_bootstrap.oelf
 PKG := $(CONTENT_ID).pkg
 MENU_ASSETS := $(wildcard assets/psychmenu/*.png)
 
-LIBS := -lc -lkernel -lc++ -lSceVideoOut -lScePad -lSceUserService
-OBJS := $(INTDIR)/main.o $(INTDIR)/graphics.o $(INTDIR)/ps4png.o
+LIBS := -lc -lkernel -lc++ -lpthread -lSceVideoOut -lScePad -lSceUserService -lSceAudioOut
+OBJS := $(INTDIR)/main.o $(INTDIR)/graphics.o $(INTDIR)/ps4png.o $(INTDIR)/audio_player.o $(INTDIR)/stb_vorbis.o
 TARGET_FLAGS := --target=x86_64-pc-freebsd12-elf -fPIC -funwind-tables -c -isysroot $(TOOLCHAIN) -isystem $(TOOLCHAIN)/include
 CXXFLAGS := $(TARGET_FLAGS) -isystem $(TOOLCHAIN)/include/c++/v1 -I$(COMMONDIR) -Isrc
 LDFLAGS := -m elf_x86_64 -pie --script $(TOOLCHAIN)/link.x --eh-frame-hdr -L$(TOOLCHAIN)/lib $(LIBS) $(TOOLCHAIN)/lib/crt1.o
@@ -31,6 +31,12 @@ $(INTDIR)/graphics.o: $(COMMONDIR)/graphics.cpp $(COMMONDIR)/graphics.h
 
 $(INTDIR)/ps4png.o: src/ps4png.cpp src/ps4png.h $(COMMONDIR)/graphics.h
 	$(CXX) $(CXXFLAGS) -o $@ $<
+
+$(INTDIR)/audio_player.o: src/audio_player.cpp src/audio_player.h src/stb_vorbis.c
+	$(CXX) $(CXXFLAGS) -o $@ $<
+
+$(INTDIR)/stb_vorbis.o: src/stb_vorbis.c | $(INTDIR)
+	$(CC) $(TARGET_FLAGS) -Isrc -o $@ $<
 
 $(OUT_ELF): $(OBJS)
 	$(LD) $(OBJS) -o $@ $(LDFLAGS)
