@@ -1,0 +1,3 @@
+[submodule "vendor/PsychEngine"]
+	path = vendor/PsychEngine
+	url = https://github.com/ShadowMario/FNF-PsychEngine.git
