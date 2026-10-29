@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
+#include <chrono>
 #include <sys/stat.h>
 
 #include <orbis/Pad.h>
@@ -143,6 +144,8 @@ enum class SubPage {
     Story,
     Freeplay,
     FreeplayDetails,
+    Gameplay,
+    Results,
     Mods,
     Awards,
     Credits,
@@ -164,6 +167,14 @@ constexpr const char *kSongDirectory = "/data/PSYH00001/songs";
 constexpr const char *kChartDirectory = "/data/PSYH00001/data";
 constexpr int kFreeplayVisibleRows = 7;
 
+struct ChartNote {
+    double strumTimeMs = 0.0;
+    int lane = 0;
+    double sustainMs = 0.0;
+    bool hit = false;
+    bool missed = false;
+};
+
 struct InstalledSong {
     std::string folder;
     std::string displayName;
@@ -180,10 +191,19 @@ struct InstalledSong {
     int noteCount = 0;
     int difficultyCount = 0;
     int selectedDifficulty = 3; // 0 easy, 1 normal, 2 hard, 3 default chart
-
+    double chartDurationMs = 0.0;
+    std::vector<ChartNote> notes;
 };
 std::vector<InstalledSong> gInstalledSongs;
 AudioPlayer gAudioPlayer;
+
+struct GameplayState {
+    std::chrono::steady_clock::time_point startedAt;
+    int score = 0;
+    int hits = 0;
+    int misses = 0;
+};
+GameplayState gGameplay;
 
 bool pathExists(const std::string &path) {
     FILE *file = fopen(path.c_str(), "rb");
@@ -221,17 +241,8 @@ double readJsonNumberForKey(const std::string &json, const char *key) {
     return end == begin || value < 0.0 ? 0.0 : value;
 }
 
-int countChartNoteEntries(const std::string &json) {
-    const std::string token = std::string(1, char(34)) + "sectionNotes" + std::string(1, char(34));
-    const size_t keyAt = json.find(token);
-    if (keyAt == std::string::npos) return 0;
-    const size_t colon = json.find(':', keyAt + token.size());
-    if (colon == std::string::npos) return 0;
-    const size_t start = json.find('[', colon + 1);
-    if (start == std::string::npos) return 0;
-
+size_t findMatchingDelimiter(const std::string &json, size_t start, char open, char close) {
     int depth = 0;
-    int notes = 0;
     bool inString = false;
     bool escaped = false;
     for (size_t i = start; i < json.size(); ++i) {
@@ -242,19 +253,104 @@ int countChartNoteEntries(const std::string &json) {
             else if (ch == '"') inString = false;
             continue;
         }
-        if (ch == '"') {
-            inString = true;
-        } else if (ch == '[') {
-            if (depth == 1) ++notes;
-            ++depth;
-        } else if (ch == ']') {
+        if (ch == '"') inString = true;
+        else if (ch == open) ++depth;
+        else if (ch == close) {
             --depth;
-            if (depth <= 0) break;
+            if (depth == 0) return i;
         }
     }
-    return notes;
+    return std::string::npos;
 }
 
+bool jsonBooleanInObject(const std::string &json, size_t objectStart, size_t objectEnd, const char *key) {
+    if (objectStart >= json.size() || objectEnd >= json.size() || objectEnd < objectStart) return false;
+    const std::string object = json.substr(objectStart, objectEnd - objectStart + 1);
+    const std::string token = std::string(1, char(34)) + key + std::string(1, char(34));
+    const size_t keyAt = object.find(token);
+    if (keyAt == std::string::npos) return false;
+    const size_t colon = object.find(':', keyAt + token.size());
+    if (colon == std::string::npos) return false;
+    const size_t valueAt = object.find_first_not_of(" \\t\\r\\n", colon + 1);
+    return valueAt != std::string::npos && object.compare(valueAt, 4, "true") == 0;
+}
+
+int parseNumericRow(const std::string &row, double values[3]) {
+    const char *cursor = row.c_str();
+    int parsed = 0;
+    while (*cursor != '\\0' && parsed < 3) {
+        while (std::isspace(static_cast<unsigned char>(*cursor)) || *cursor == ',') ++cursor;
+        char *end = nullptr;
+        const double value = strtod(cursor, &end);
+        if (end == cursor) break;
+        values[parsed++] = value;
+        cursor = end;
+        while (std::isspace(static_cast<unsigned char>(*cursor))) ++cursor;
+        if (*cursor == ',') ++cursor;
+    }
+    return parsed;
+}
+
+void parsePlayerChartNotes(InstalledSong &song, const std::string &json) {
+    song.notes.clear();
+    song.noteCount = 0;
+    song.chartDurationMs = 0.0;
+    const std::string token = std::string(1, char(34)) + "sectionNotes" + std::string(1, char(34));
+    size_t searchFrom = 0;
+
+    while (searchFrom < json.size() && song.noteCount < 100000) {
+        const size_t keyAt = json.find(token, searchFrom);
+        if (keyAt == std::string::npos) break;
+        const size_t colon = json.find(':', keyAt + token.size());
+        if (colon == std::string::npos) break;
+        const size_t arrayStart = json.find('[', colon + 1);
+        if (arrayStart == std::string::npos) break;
+        const size_t arrayEnd = findMatchingDelimiter(json, arrayStart, '[', ']');
+        if (arrayEnd == std::string::npos) break;
+
+        const size_t sectionStart = json.rfind('{', keyAt);
+        const size_t sectionEnd = sectionStart == std::string::npos
+            ? std::string::npos : findMatchingDelimiter(json, sectionStart, '{', '}');
+        const bool mustHit = sectionEnd != std::string::npos && sectionEnd >= keyAt
+            ? jsonBooleanInObject(json, sectionStart, sectionEnd, "mustHitSection") : false;
+
+        size_t rowCursor = arrayStart + 1;
+        while (rowCursor < arrayEnd && song.noteCount < 100000) {
+            while (rowCursor < arrayEnd &&
+                   (std::isspace(static_cast<unsigned char>(json[rowCursor])) || json[rowCursor] == ',')) ++rowCursor;
+            if (rowCursor >= arrayEnd) break;
+            if (json[rowCursor] != '[') { ++rowCursor; continue; }
+
+            const size_t rowEnd = findMatchingDelimiter(json, rowCursor, '[', ']');
+            if (rowEnd == std::string::npos || rowEnd > arrayEnd) break;
+            const std::string row = json.substr(rowCursor + 1, rowEnd - rowCursor - 1);
+            double values[3] = {0.0, 0.0, 0.0};
+            const int valueCount = parseNumericRow(row, values);
+            if (valueCount >= 2 && values[0] >= 0.0) {
+                ++song.noteCount;
+                song.chartDurationMs = std::max(song.chartDurationMs, values[0]);
+                int lane = static_cast<int>(values[1]);
+                bool playerNote = mustHit;
+                if (lane >= 4) {
+                    lane -= 4;
+                    playerNote = !playerNote;
+                }
+                if (playerNote && lane >= 0 && lane < 4) {
+                    ChartNote note;
+                    note.strumTimeMs = values[0];
+                    note.lane = lane;
+                    note.sustainMs = valueCount >= 3 ? std::max(0.0, values[2]) : 0.0;
+                    song.notes.push_back(note);
+                }
+            }
+            rowCursor = rowEnd + 1;
+        }
+        searchFrom = arrayEnd + 1;
+    }
+
+    std::sort(song.notes.begin(), song.notes.end(),
+        [](const ChartNote &a, const ChartNote &b) { return a.strumTimeMs < b.strumTimeMs; });
+}
 std::string firstExistingPath(const std::vector<std::string> &candidates) {
     for (const std::string &candidate : candidates) {
         if (pathExists(candidate)) return candidate;
@@ -293,7 +389,7 @@ void loadSelectedChartMetadata(InstalledSong &song) {
     if (json.empty()) return;
     song.hasChart = true;
     song.bpm = readJsonNumberForKey(json, "bpm");
-    song.noteCount = countChartNoteEntries(json);
+    parsePlayerChartNotes(song, json);
 }
 
 void readSongChartMetadata(InstalledSong &song) {
@@ -466,8 +562,8 @@ void drawFreeplayDetails(Scene2D *scene, Ps4Image &background, const InstalledSo
     drawCenteredText(scene, bpmLine, 525, 4, white);
     drawCenteredText(scene, noteLine, 575, 4, white);
     drawCenteredText(scene, difficultyLine, 625, 4, white);
-    drawCenteredText(scene, gAudioPlayer.isPlaying() ? "INSTRUMENTAL PREVIEW PLAYING" :
-        (song.hasInstrumental ? "PRESS X TO PLAY INSTRUMENTAL" : "NO INSTRUMENTAL PREVIEW FOUND"),
+    drawCenteredText(scene, song.hasChart && !song.notes.empty() ? "CROSS STARTS CHART PLAYTEST" :
+        (song.hasInstrumental ? "TRIANGLE PLAYS INSTRUMENTAL" : "NO CHART OR AUDIO FOUND"),
         680, 3, gAudioPlayer.isPlaying() ? white : muted);
     drawCenteredText(scene, "LEFT RIGHT CHANGE DIFFICULTY", 735, 3, white);
     drawCenteredText(scene, "SQUARE STOPS AUDIO PREVIEW", 770, 3, white);
@@ -556,6 +652,112 @@ void drawMainMenu(Scene2D *scene, Ps4Image &background, MenuOption *items,
         drawText(scene, "UP DOWN MOVE", 1640, kScreenHeight - 66, footerScale, white);
         drawText(scene, "X SELECT  O BACK", 1592, kScreenHeight - 38, footerScale, white);
     }
+}
+
+double gameplayElapsedMs() {
+    return std::chrono::duration<double, std::milli>(
+        std::chrono::steady_clock::now() - gGameplay.startedAt).count();
+}
+
+void startGameplay(InstalledSong &song) {
+    gAudioPlayer.stop();
+    for (ChartNote &note : song.notes) {
+        note.hit = false;
+        note.missed = false;
+    }
+    gGameplay.score = 0;
+    gGameplay.hits = 0;
+    gGameplay.misses = 0;
+    if (song.hasInstrumental && !gAudioPlayer.play(song.instrumentalPath))
+        printf("Gameplay audio unavailable: %s\\n", gAudioPlayer.lastError());
+    gGameplay.startedAt = std::chrono::steady_clock::now();
+}
+
+void hitGameplayLane(InstalledSong &song, int lane, double elapsed) {
+    int bestIndex = -1;
+    double bestDelta = 151.0;
+    for (size_t i = 0; i < song.notes.size(); ++i) {
+        ChartNote &note = song.notes[i];
+        if (note.hit || note.missed || note.lane != lane) continue;
+        const double delta = std::fabs(note.strumTimeMs - elapsed);
+        if (delta < bestDelta) { bestDelta = delta; bestIndex = static_cast<int>(i); }
+    }
+    if (bestIndex < 0) return;
+    ChartNote &note = song.notes[static_cast<size_t>(bestIndex)];
+    note.hit = true;
+    ++gGameplay.hits;
+    if (bestDelta <= 45.0) gGameplay.score += 350;
+    else if (bestDelta <= 90.0) gGameplay.score += 200;
+    else gGameplay.score += 100;
+}
+
+void updateGameplayMisses(InstalledSong &song, double elapsed) {
+    for (ChartNote &note : song.notes) {
+        if (!note.hit && !note.missed && elapsed > note.strumTimeMs + 180.0) {
+            note.missed = true;
+            ++gGameplay.misses;
+        }
+    }
+}
+
+void drawGameplay(Scene2D *scene, Ps4Image &background, InstalledSong &song, double elapsed) {
+    if (gMenuSettings.showMenuBackground) background.Draw(scene, 0, 0);
+    else scene->DrawRectangle(0, 0, kScreenWidth, kScreenHeight, {13, 16, 31});
+
+    const Color panel = {18, 17, 28}, accent = {239, 45, 71};
+    const Color white = {255, 255, 255}, muted = {170, 168, 190};
+    const Color lanes[4] = {{72, 184, 245}, {74, 220, 135}, {246, 202, 71}, {236, 85, 116}};
+    drawPanel(scene, 390, 70, 1140, 910, panel, accent, 5);
+    drawCenteredText(scene, "CUSTOM CHART PLAYTEST", 105, 6, white);
+
+    char scoreLine[48], hitLine[32], missLine[32];
+    snprintf(scoreLine, sizeof(scoreLine), "SCORE %d", gGameplay.score);
+    snprintf(hitLine, sizeof(hitLine), "HITS %d", gGameplay.hits);
+    snprintf(missLine, sizeof(missLine), "MISSES %d", gGameplay.misses);
+    drawText(scene, scoreLine, 430, 160, 3, white);
+    drawText(scene, hitLine, 430, 195, 3, white);
+    drawText(scene, missLine, 430, 230, 3, white);
+
+    const int laneX = 600, laneStep = 180, receptorY = 790;
+    const double pixelsPerMs = 0.42;
+    for (int lane = 0; lane < 4; ++lane) {
+        const int x = laneX + lane * laneStep;
+        scene->DrawRectangle(x, 285, 90, 590, {32, 30, 43});
+        scene->DrawRectangle(x + 9, receptorY, 72, 18, lanes[lane]);
+    }
+    for (const ChartNote &note : song.notes) {
+        if (note.hit || note.missed) continue;
+        const double difference = note.strumTimeMs - elapsed;
+        if (difference > 1650.0 || difference < -200.0) continue;
+        const int y = static_cast<int>(std::lround(receptorY - difference * pixelsPerMs));
+        if (y < 270 || y > 875) continue;
+        const int x = laneX + note.lane * laneStep + 9;
+        scene->DrawRectangle(x, y, 72, 24, lanes[note.lane]);
+        if (note.sustainMs > 0.0) {
+            const int height = static_cast<int>(std::min(220.0, note.sustainMs * pixelsPerMs));
+            scene->DrawRectangle(x + 28, y - height, 16, height, lanes[note.lane]);
+        }
+    }
+    drawCenteredText(scene, "DPAD LEFT DOWN UP RIGHT TO HIT", 910, 3, white);
+    drawCenteredText(scene, "CIRCLE ABORTS SONG", 945, 3, muted);
+}
+
+void drawGameplayResults(Scene2D *scene, Ps4Image &background) {
+    if (gMenuSettings.showMenuBackground) background.Draw(scene, 0, 0);
+    else scene->DrawRectangle(0, 0, kScreenWidth, kScreenHeight, {13, 16, 31});
+    const Color panel = {22, 20, 32}, accent = {239, 45, 71};
+    const Color white = {255, 255, 255}, muted = {190, 186, 202};
+    drawPanel(scene, 360, 200, 1200, 650, panel, accent, 5);
+    drawCenteredText(scene, "PLAYTEST RESULTS", 265, 8, white);
+    char score[48], hits[48], misses[48];
+    snprintf(score, sizeof(score), "SCORE %d", gGameplay.score);
+    snprintf(hits, sizeof(hits), "HITS %d", gGameplay.hits);
+    snprintf(misses, sizeof(misses), "MISSES %d", gGameplay.misses);
+    drawCenteredText(scene, score, 420, 6, white);
+    drawCenteredText(scene, hits, 505, 5, muted);
+    drawCenteredText(scene, misses, 565, 5, muted);
+    drawCenteredText(scene, "CROSS PLAY AGAIN", 700, 4, white);
+    drawCenteredText(scene, "CIRCLE BACK TO FREEPLAY", 755, 4, muted);
 }
 
 void drawPlaceholder(Scene2D *scene, Ps4Image &background, SubPage page) {
@@ -763,14 +965,22 @@ int main() {
                 if (pressed & ORBIS_PAD_BUTTON_LEFT) changeSongDifficulty(song, -1);
                 if (pressed & ORBIS_PAD_BUTTON_RIGHT) changeSongDifficulty(song, 1);
                 if (pressed & ORBIS_PAD_BUTTON_TRIANGLE) {
-                    gInstalledSongs = scanInstalledSongs();
-                    freeplaySelectedIndex = std::min(freeplaySelectedIndex,
-                        std::max(0, static_cast<int>(gInstalledSongs.size()) - 1));
-                }
-                if (pressed & ORBIS_PAD_BUTTON_CROSS) {
                     if (song.hasInstrumental) {
                         if (!gAudioPlayer.play(song.instrumentalPath))
                             printf("Audio preview failed: %s\\n", gAudioPlayer.lastError());
+                    } else {
+                        gInstalledSongs = scanInstalledSongs();
+                        freeplaySelectedIndex = std::min(freeplaySelectedIndex,
+                            std::max(0, static_cast<int>(gInstalledSongs.size()) - 1));
+                    }
+                }
+                if (pressed & ORBIS_PAD_BUTTON_CROSS) {
+                    if (song.hasChart && !song.notes.empty()) {
+                        startGameplay(song);
+                        page = SubPage::Gameplay;
+                    } else if (song.hasInstrumental &&
+                               !gAudioPlayer.play(song.instrumentalPath)) {
+                        printf("Audio preview failed: %s\\n", gAudioPlayer.lastError());
                     }
                 }
             }
@@ -778,6 +988,36 @@ int main() {
             if (pressed & ORBIS_PAD_BUTTON_CIRCLE) {
                 gAudioPlayer.stop();
                 page = SubPage::Freeplay;
+            }
+        } else if (page == SubPage::Gameplay) {
+            if (!gInstalledSongs.empty()) {
+                const int songIndex = std::max(0, std::min(freeplaySelectedIndex,
+                    static_cast<int>(gInstalledSongs.size()) - 1));
+                InstalledSong &song = gInstalledSongs[static_cast<size_t>(songIndex)];
+                const double elapsed = gameplayElapsedMs();
+                updateGameplayMisses(song, elapsed);
+                if (pressed & ORBIS_PAD_BUTTON_LEFT) hitGameplayLane(song, 0, elapsed);
+                if (pressed & ORBIS_PAD_BUTTON_DOWN) hitGameplayLane(song, 1, elapsed);
+                if (pressed & ORBIS_PAD_BUTTON_UP) hitGameplayLane(song, 2, elapsed);
+                if (pressed & ORBIS_PAD_BUTTON_RIGHT) hitGameplayLane(song, 3, elapsed);
+                if (pressed & ORBIS_PAD_BUTTON_CIRCLE) {
+                    gAudioPlayer.stop();
+                    page = SubPage::Freeplay;
+                } else if (elapsed >= song.chartDurationMs + 2200.0) {
+                    gAudioPlayer.stop();
+                    page = SubPage::Results;
+                }
+            } else {
+                gAudioPlayer.stop();
+                page = SubPage::Freeplay;
+            }
+        } else if (page == SubPage::Results) {
+            if (pressed & ORBIS_PAD_BUTTON_CIRCLE) page = SubPage::Freeplay;
+            else if ((pressed & ORBIS_PAD_BUTTON_CROSS) && !gInstalledSongs.empty()) {
+                const int songIndex = std::max(0, std::min(freeplaySelectedIndex,
+                    static_cast<int>(gInstalledSongs.size()) - 1));
+                startGameplay(gInstalledSongs[static_cast<size_t>(songIndex)]);
+                page = SubPage::Gameplay;
             }
         } else if (page == SubPage::Options) {
             if (pressed & ORBIS_PAD_BUTTON_UP) {
@@ -833,6 +1073,12 @@ int main() {
         } else if (page == SubPage::FreeplayDetails) {
             page = SubPage::Freeplay;
             drawFreeplay(scene, background, freeplaySelectedIndex);
+        } else if (page == SubPage::Gameplay && !gInstalledSongs.empty()) {
+            const int songIndex = std::max(0, std::min(freeplaySelectedIndex,
+                static_cast<int>(gInstalledSongs.size()) - 1));
+            drawGameplay(scene, background, gInstalledSongs[static_cast<size_t>(songIndex)], gameplayElapsedMs());
+        } else if (page == SubPage::Results) {
+            drawGameplayResults(scene, background);
         } else if (page == SubPage::Options) {
             drawOptions(scene, background, optionsSelectedIndex);
         } else {
