@@ -170,9 +170,15 @@ struct InstalledSong {
     bool hasInstrumental = false;
     bool hasVoices = false;
     std::string chartPath;
+    std::string defaultChartPath;
+    std::string easyChartPath;
+    std::string normalChartPath;
+    std::string hardChartPath;
     double bpm = 0.0;
     int noteCount = 0;
     int difficultyCount = 0;
+    int selectedDifficulty = 3; // 0 easy, 1 normal, 2 hard, 3 default chart
+
 };
 std::vector<InstalledSong> gInstalledSongs;
 
@@ -246,54 +252,110 @@ int countChartNoteEntries(const std::string &json) {
     return notes;
 }
 
-void readSongChartMetadata(InstalledSong &song) {
-    const std::string folderPath = std::string(kSongDirectory) + "/" + song.folder;
-    const std::string dataPath = std::string(kChartDirectory) + "/" + song.folder;
-    const std::vector<std::string> candidates = {
-        folderPath + "/" + song.folder + ".json",
-        folderPath + "/chart.json",
-        dataPath + "/" + song.folder + ".json",
-        dataPath + "/chart.json",
-        dataPath + "/" + song.folder + "-normal.json",
-        dataPath + "/" + song.folder + "-easy.json",
-        dataPath + "/" + song.folder + "-hard.json",
-        folderPath + "/" + song.folder + "-normal.json",
-        folderPath + "/" + song.folder + "-easy.json",
-        folderPath + "/" + song.folder + "-hard.json"
-    };
-
+std::string firstExistingPath(const std::vector<std::string> &candidates) {
     for (const std::string &candidate : candidates) {
-        if (pathExists(candidate)) {
-            song.chartPath = candidate;
-            break;
+        if (pathExists(candidate)) return candidate;
+    }
+    return std::string();
+}
+
+void loadSelectedChartMetadata(InstalledSong &song) {
+    song.chartPath.clear();
+    if (song.selectedDifficulty == 0) song.chartPath = song.easyChartPath;
+    else if (song.selectedDifficulty == 1) song.chartPath = song.normalChartPath;
+    else if (song.selectedDifficulty == 2) song.chartPath = song.hardChartPath;
+    else song.chartPath = song.defaultChartPath;
+
+    if (song.chartPath.empty()) {
+        if (!song.normalChartPath.empty()) {
+            song.selectedDifficulty = 1;
+            song.chartPath = song.normalChartPath;
+        } else if (!song.defaultChartPath.empty()) {
+            song.selectedDifficulty = 3;
+            song.chartPath = song.defaultChartPath;
+        } else if (!song.easyChartPath.empty()) {
+            song.selectedDifficulty = 0;
+            song.chartPath = song.easyChartPath;
+        } else if (!song.hardChartPath.empty()) {
+            song.selectedDifficulty = 2;
+            song.chartPath = song.hardChartPath;
         }
     }
-    if (song.chartPath.empty()) {
-        song.hasChart = false;
-        return;
-    }
 
+    song.hasChart = false;
+    song.bpm = 0.0;
+    song.noteCount = 0;
+    if (song.chartPath.empty()) return;
     const std::string json = readTextFile(song.chartPath);
-    if (json.empty()) {
-        song.hasChart = false;
-        return;
-    }
+    if (json.empty()) return;
     song.hasChart = true;
     song.bpm = readJsonNumberForKey(json, "bpm");
     song.noteCount = countChartNoteEntries(json);
+}
 
-    // Psych Engine commonly stores separate chart files for easy/normal/hard.
-    const std::string names[] = {
-        song.folder + "-easy.json",
-        song.folder + "-normal.json",
-        song.folder + "-hard.json"
-    };
-    for (const std::string &name : names) {
-        if (pathExists(dataPath + "/" + name) || pathExists(folderPath + "/" + name)) {
-            ++song.difficultyCount;
-        }
+void readSongChartMetadata(InstalledSong &song) {
+    const std::string folderPath = std::string(kSongDirectory) + "/" + song.folder;
+    const std::string dataPath = std::string(kChartDirectory) + "/" + song.folder;
+    song.defaultChartPath = firstExistingPath({
+        folderPath + "/" + song.folder + ".json",
+        folderPath + "/chart.json",
+        dataPath + "/" + song.folder + ".json",
+        dataPath + "/chart.json"
+    });
+    song.easyChartPath = firstExistingPath({
+        dataPath + "/" + song.folder + "-easy.json",
+        folderPath + "/" + song.folder + "-easy.json"
+    });
+    song.normalChartPath = firstExistingPath({
+        dataPath + "/" + song.folder + "-normal.json",
+        folderPath + "/" + song.folder + "-normal.json"
+    });
+    song.hardChartPath = firstExistingPath({
+        dataPath + "/" + song.folder + "-hard.json",
+        folderPath + "/" + song.folder + "-hard.json"
+    });
+
+    const bool hasSeparateDifficulties = !song.easyChartPath.empty() ||
+        !song.normalChartPath.empty() || !song.hardChartPath.empty();
+    song.difficultyCount = (!song.easyChartPath.empty() ? 1 : 0) +
+        (!song.normalChartPath.empty() ? 1 : 0) + (!song.hardChartPath.empty() ? 1 : 0);
+    if (!hasSeparateDifficulties && !song.defaultChartPath.empty()) {
+        song.difficultyCount = 1;
+        song.selectedDifficulty = 3;
+    } else if (!song.normalChartPath.empty()) {
+        song.selectedDifficulty = 1;
+    } else if (!song.easyChartPath.empty()) {
+        song.selectedDifficulty = 0;
+    } else if (!song.hardChartPath.empty()) {
+        song.selectedDifficulty = 2;
+    } else {
+        song.selectedDifficulty = 3;
     }
-    if (song.difficultyCount == 0) song.difficultyCount = 1;
+    loadSelectedChartMetadata(song);
+}
+
+void changeSongDifficulty(InstalledSong &song, int direction) {
+    int choices[3];
+    int count = 0;
+    if (!song.easyChartPath.empty()) choices[count++] = 0;
+    if (!song.normalChartPath.empty()) choices[count++] = 1;
+    if (!song.hardChartPath.empty()) choices[count++] = 2;
+    if (count < 2) return;
+
+    int current = -1;
+    for (int i = 0; i < count; ++i)
+        if (choices[i] == song.selectedDifficulty) current = i;
+    if (current < 0) current = direction >= 0 ? -1 : 0;
+    current = (current + (direction >= 0 ? 1 : count - 1)) % count;
+    song.selectedDifficulty = choices[current];
+    loadSelectedChartMetadata(song);
+}
+
+const char *songDifficultyName(const InstalledSong &song) {
+    if (song.selectedDifficulty == 0) return "DIFFICULTY EASY";
+    if (song.selectedDifficulty == 1) return "DIFFICULTY NORMAL";
+    if (song.selectedDifficulty == 2) return "DIFFICULTY HARD";
+    return "DIFFICULTY DEFAULT";
 }
 
 std::string readableSongName(const std::string &folder) {
@@ -396,11 +458,12 @@ void drawFreeplayDetails(Scene2D *scene, Ps4Image &background, const InstalledSo
     else snprintf(bpmLine, sizeof(bpmLine), "BPM UNKNOWN");
     snprintf(noteLine, sizeof(noteLine), "CHART NOTES %d", song.noteCount);
     snprintf(difficultyLine, sizeof(difficultyLine), "CHART DIFFICULTIES %d", song.difficultyCount);
-    drawCenteredText(scene, bpmLine, 515, 4, white);
-    drawCenteredText(scene, noteLine, 565, 4, white);
-    drawCenteredText(scene, difficultyLine, 615, 4, white);
+    drawCenteredText(scene, songDifficultyName(song), 475, 4, white);
+    drawCenteredText(scene, bpmLine, 525, 4, white);
+    drawCenteredText(scene, noteLine, 575, 4, white);
+    drawCenteredText(scene, difficultyLine, 625, 4, white);
     drawCenteredText(scene, "FILES DETECTED BUT GAMEPLAY IS NOT READY", 680, 3, muted);
-    drawCenteredText(scene, "AUDIO AND NOTE PLAYBACK RUNTIME IS NEXT", 720, 3, muted);
+    drawCenteredText(scene, "LEFT RIGHT CHANGE DIFFICULTY", 755, 3, white);
     drawCenteredText(scene, "CIRCLE BACK TO SONG LIST", 805, 4, white);
 }
 
@@ -686,11 +749,21 @@ int main() {
             }
             if (pressed & ORBIS_PAD_BUTTON_CIRCLE) page = SubPage::None;
         } else if (page == SubPage::FreeplayDetails) {
-            if (pressed & ORBIS_PAD_BUTTON_CROSS) {
-                gInstalledSongs = scanInstalledSongs();
-                page = SubPage::Freeplay;
-                freeplaySelectedIndex = std::min(freeplaySelectedIndex, std::max(0, static_cast<int>(gInstalledSongs.size()) - 1));
-            } else if (pressed & ORBIS_PAD_BUTTON_CIRCLE) page = SubPage::Freeplay;
+            if (!gInstalledSongs.empty()) {
+                const int detailIndex = std::max(0, std::min(freeplaySelectedIndex,
+                    static_cast<int>(gInstalledSongs.size()) - 1));
+                if (pressed & ORBIS_PAD_BUTTON_LEFT)
+                    changeSongDifficulty(gInstalledSongs[static_cast<size_t>(detailIndex)], -1);
+                if (pressed & ORBIS_PAD_BUTTON_RIGHT)
+                    changeSongDifficulty(gInstalledSongs[static_cast<size_t>(detailIndex)], 1);
+                if (pressed & ORBIS_PAD_BUTTON_TRIANGLE) {
+                    gInstalledSongs = scanInstalledSongs();
+                    freeplaySelectedIndex = std::min(freeplaySelectedIndex,
+                        std::max(0, static_cast<int>(gInstalledSongs.size()) - 1));
+                }
+            }
+            if (pressed & ORBIS_PAD_BUTTON_CROSS) page = SubPage::Freeplay;
+            else if (pressed & ORBIS_PAD_BUTTON_CIRCLE) page = SubPage::Freeplay;
         } else if (page == SubPage::Options) {
             if (pressed & ORBIS_PAD_BUTTON_UP) {
                 optionsSelectedIndex = (optionsSelectedIndex + kOptionsCount - 1) % kOptionsCount;
