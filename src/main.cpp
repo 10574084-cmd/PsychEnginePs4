@@ -3,6 +3,7 @@
 #include <string.h>
 #include <sstream>
 #include <cmath>
+#include <sys/stat.h>
 
 #include <orbis/Pad.h>
 #include <orbis/UserService.h>
@@ -141,9 +142,64 @@ enum class SubPage {
     Options
 };
 
+struct MenuSettings {
+    bool showVersionInfo = true;
+    bool showControlHints = true;
+    bool showMenuBackground = true;
+};
+
+MenuSettings gMenuSettings;
+constexpr const char *kSettingsDirectory = "/data/PSYH00001";
+constexpr const char *kSettingsPath = "/data/PSYH00001/menu_settings.cfg";
+constexpr int kOptionsCount = 5;
+
+void loadMenuSettings() {
+    FILE *file = fopen(kSettingsPath, "r");
+    if (file == nullptr) {
+        printf("Menu settings: using defaults (no saved settings found).\\n");
+        return;
+    }
+
+    int showVersionInfo = 1;
+    int showControlHints = 1;
+    int showMenuBackground = 1;
+    const int parsed = fscanf(file, "%d %d %d",
+                              &showVersionInfo, &showControlHints, &showMenuBackground);
+    fclose(file);
+
+    if (parsed == 3) {
+        gMenuSettings.showVersionInfo = showVersionInfo != 0;
+        gMenuSettings.showControlHints = showControlHints != 0;
+        gMenuSettings.showMenuBackground = showMenuBackground != 0;
+        printf("Menu settings loaded.\\n");
+    } else {
+        printf("Menu settings file is invalid; using defaults.\\n");
+    }
+}
+
+void saveMenuSettings() {
+    mkdir(kSettingsDirectory, 0777);
+    FILE *file = fopen(kSettingsPath, "w");
+    if (file == nullptr) {
+        printf("Could not save menu settings to %s.\\n", kSettingsPath);
+        return;
+    }
+
+    fprintf(file, "%d %d %d\\n",
+            gMenuSettings.showVersionInfo ? 1 : 0,
+            gMenuSettings.showControlHints ? 1 : 0,
+            gMenuSettings.showMenuBackground ? 1 : 0);
+    fclose(file);
+    printf("Menu settings saved.\\n");
+}
+
 void drawMainMenu(Scene2D *scene, Ps4Image &background, MenuOption *items,
                   int itemCount, int selectedIndex) {
-    background.Draw(scene, 0, 0);
+    if (gMenuSettings.showMenuBackground) {
+        background.Draw(scene, 0, 0);
+    } else {
+        scene->DrawRectangle(0, 0, kScreenWidth, kScreenHeight, {13, 16, 31});
+    }
 
     // Psych Engine 0.6.3's menu uses 140px spacing, a -132px base offset
     // for seven entries, and tracks the selected sprite with a small vertical bias.
@@ -167,12 +223,25 @@ void drawMainMenu(Scene2D *scene, Ps4Image &background, MenuOption *items,
 
     const Color white = {255, 255, 255};
     const int footerScale = 2;
-    drawText(scene, "PSYCH ENGINE V0.6.2", 18, kScreenHeight - 66, footerScale, white);
-    drawText(scene, "FRIDAY NIGHT FUNKIN V0.2", 18, kScreenHeight - 38, footerScale, white);
+
+    if (gMenuSettings.showVersionInfo) {
+        drawText(scene, "ECHO ENGINE BETA", 18, kScreenHeight - 94, footerScale, white);
+        drawText(scene, "PSYCH ENGINE V0.6.3", 18, kScreenHeight - 66, footerScale, white);
+        drawText(scene, "FRIDAY NIGHT FUNKIN V0.2", 18, kScreenHeight - 38, footerScale, white);
+    }
+
+    if (gMenuSettings.showControlHints) {
+        drawText(scene, "UP DOWN MOVE", 1640, kScreenHeight - 66, footerScale, white);
+        drawText(scene, "X SELECT  O BACK", 1592, kScreenHeight - 38, footerScale, white);
+    }
 }
 
 void drawPlaceholder(Scene2D *scene, Ps4Image &background, SubPage page) {
-    background.Draw(scene, 0, 0);
+    if (gMenuSettings.showMenuBackground) {
+        background.Draw(scene, 0, 0);
+    } else {
+        scene->DrawRectangle(0, 0, kScreenWidth, kScreenHeight, {13, 16, 31});
+    }
     const Color panel = {22, 20, 32};
     const Color accent = {239, 45, 71};
     const Color white = {255, 255, 255};
@@ -197,6 +266,58 @@ void drawPlaceholder(Scene2D *scene, Ps4Image &background, SubPage page) {
     drawCenteredText(scene, "GAMEPLAY AND THIS SUBMENU ARE NOT PORTED", boxY + 225, 4, muted);
     drawCenteredText(scene, "PRESS O TO RETURN", boxY + 286, 4, white);
 }
+void drawOptions(Scene2D *scene, Ps4Image &background, int selectedIndex) {
+    if (gMenuSettings.showMenuBackground) {
+        background.Draw(scene, 0, 0);
+    } else {
+        scene->DrawRectangle(0, 0, kScreenWidth, kScreenHeight, {13, 16, 31});
+    }
+
+    const Color panel = {22, 20, 32};
+    const Color accent = {239, 45, 71};
+    const Color white = {255, 255, 255};
+    const Color muted = {175, 171, 190};
+    const Color rowFill = {32, 29, 43};
+    const Color rowEdge = {70, 65, 82};
+
+    drawPanel(scene, 300, 145, 1320, 790, panel, accent, 5);
+    drawCenteredText(scene, "ECHO ENGINE OPTIONS", 195, 8, white);
+    drawCenteredText(scene, "NATIVE PS4 MENU SETTINGS", 265, 4, muted);
+
+    char versionLine[64];
+    char hintsLine[64];
+    char backgroundLine[64];
+    snprintf(versionLine, sizeof(versionLine), "SHOW VERSION INFO - %s",
+             gMenuSettings.showVersionInfo ? "ON" : "OFF");
+    snprintf(hintsLine, sizeof(hintsLine), "SHOW CONTROL HINTS - %s",
+             gMenuSettings.showControlHints ? "ON" : "OFF");
+    snprintf(backgroundLine, sizeof(backgroundLine), "MENU BACKGROUND - %s",
+             gMenuSettings.showMenuBackground ? "ON" : "OFF");
+
+    const char *options[kOptionsCount] = {
+        versionLine,
+        hintsLine,
+        backgroundLine,
+        "RESTORE DEFAULTS",
+        "BACK TO MAIN MENU"
+    };
+
+    for (int i = 0; i < kOptionsCount; ++i) {
+        const int rowX = 430;
+        const int rowY = 325 + i * 104;
+        const int rowW = 1060;
+        const int rowH = 78;
+        const bool selected = i == selectedIndex;
+        drawPanel(scene, rowX, rowY, rowW, rowH, rowFill,
+                  selected ? accent : rowEdge, selected ? 4 : 2);
+        drawText(scene, options[i], rowX + 30, rowY + 31, 4,
+                 selected ? white : muted);
+    }
+
+    drawCenteredText(scene, "CROSS OR LEFT RIGHT TO CHANGE", 865, 3, white);
+    drawCenteredText(scene, "CIRCLE TO RETURN", 900, 3, muted);
+}
+
 } // namespace
 
 int main() {
@@ -247,6 +368,8 @@ int main() {
         }
     }
 
+    loadMenuSettings();
+
     int padHandle = -1;
     const bool controllerReady = initController(padHandle);
     if (!controllerReady) {
@@ -255,6 +378,7 @@ int main() {
 
     uint32_t previousButtons = 0;
     int selectedIndex = 0;
+    int optionsSelectedIndex = 0;
     SubPage page = SubPage::None;
     int frameId = 0;
 
@@ -286,8 +410,51 @@ int main() {
                     case 3: page = SubPage::Awards; break;
                     case 4: page = SubPage::Credits; break;
                     case 5: page = SubPage::Donate; break;
-                    default: page = SubPage::Options; break;
+                    default:
+                        page = SubPage::Options;
+                        optionsSelectedIndex = 0;
+                        break;
                 }
+            }
+        } else if (page == SubPage::Options) {
+            if (pressed & ORBIS_PAD_BUTTON_UP) {
+                optionsSelectedIndex = (optionsSelectedIndex + kOptionsCount - 1) % kOptionsCount;
+            }
+            if (pressed & ORBIS_PAD_BUTTON_DOWN) {
+                optionsSelectedIndex = (optionsSelectedIndex + 1) % kOptionsCount;
+            }
+
+            const bool activate = (pressed & ORBIS_PAD_BUTTON_CROSS) != 0;
+            const bool adjustLeft = (pressed & ORBIS_PAD_BUTTON_LEFT) != 0;
+            const bool adjustRight = (pressed & ORBIS_PAD_BUTTON_RIGHT) != 0;
+            if (activate || adjustLeft || adjustRight) {
+                switch (optionsSelectedIndex) {
+                    case 0:
+                        gMenuSettings.showVersionInfo = !gMenuSettings.showVersionInfo;
+                        saveMenuSettings();
+                        break;
+                    case 1:
+                        gMenuSettings.showControlHints = !gMenuSettings.showControlHints;
+                        saveMenuSettings();
+                        break;
+                    case 2:
+                        gMenuSettings.showMenuBackground = !gMenuSettings.showMenuBackground;
+                        saveMenuSettings();
+                        break;
+                    case 3:
+                        gMenuSettings = MenuSettings{};
+                        saveMenuSettings();
+                        break;
+                    case 4:
+                        if (activate || (pressed & ORBIS_PAD_BUTTON_CIRCLE)) {
+                            page = SubPage::None;
+                        }
+                        break;
+                }
+            }
+
+            if (pressed & ORBIS_PAD_BUTTON_CIRCLE) {
+                page = SubPage::None;
             }
         } else if (pressed & ORBIS_PAD_BUTTON_CIRCLE) {
             page = SubPage::None;
@@ -295,6 +462,8 @@ int main() {
 
         if (page == SubPage::None) {
             drawMainMenu(scene, background, items, itemCount, selectedIndex);
+        } else if (page == SubPage::Options) {
+            drawOptions(scene, background, optionsSelectedIndex);
         } else {
             drawPlaceholder(scene, background, page);
         }
