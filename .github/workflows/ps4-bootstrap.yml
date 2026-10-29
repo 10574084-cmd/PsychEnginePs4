@@ -16,6 +16,8 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - name: Install build dependencies
         run: sudo apt-get update && sudo apt-get install -y make curl libicu-dev clang lld python3 python3-pil zlib1g-dev
       - name: Install libssl1.1 for OpenOrbis package tool
@@ -42,12 +44,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          base='https://raw.githubusercontent.com/ShadowMario/FNF-PsychEngine/0.6.3/assets/preload/images'
+          base='vendor/PsychEngine/assets/preload/images'
           mkdir -p assets/psychmenu/source
-          curl -fsSL "$base/menuBG.png" -o assets/psychmenu/source/menuBG.png
+          cp "$base/menuBG.png" assets/psychmenu/source/menuBG.png
           for item in story_mode freeplay mods awards credits donate options; do
-            curl -fsSL "$base/mainmenu/menu_$item.png" -o "assets/psychmenu/source/menu_$item.png"
-            curl -fsSL "$base/mainmenu/menu_$item.xml" -o "assets/psychmenu/source/menu_$item.xml"
+            cp "$base/mainmenu/menu_$item.png" "assets/psychmenu/source/menu_$item.png"
+            cp "$base/mainmenu/menu_$item.xml" "assets/psychmenu/source/menu_$item.xml"
           done
           python3 tools/prepare_psych_menu.py --source assets/psychmenu/source --out assets/psychmenu
           curl -fsSL https://raw.githubusercontent.com/nothings/stb/003501f6d7a8668ce8b6d875e34dd97ad0d5d5b5/stb_vorbis.c -o src/stb_vorbis.c
@@ -55,20 +57,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          base='https://raw.githubusercontent.com/ShadowMario/FNF-PsychEngine/0.6.3/assets'
+          base='vendor/PsychEngine/assets'
           mkdir -p assets/songs assets/preload/data
           songs=(tutorial bopeebo fresh dad-battle spookeez south pico philly-nice blammed satin-panties high milf monster cocoa eggnog winter-horrorland senpai roses thorns ugh guns stress)
           for song in "${songs[@]}"; do
             mkdir -p "assets/songs/$song" "assets/preload/data/$song"
-            curl -fsSL "$base/songs/$song/Inst.ogg" -o "assets/songs/$song/Inst.ogg"
-            if curl -fsSL "$base/songs/$song/Voices.ogg" -o "assets/songs/$song/Voices.ogg"; then
+            cp "$base/songs/$song/Inst.ogg" "assets/songs/$song/Inst.ogg"
+            if [[ -s "$base/songs/$song/Voices.ogg" ]] && cp "$base/songs/$song/Voices.ogg" "assets/songs/$song/Voices.ogg"; then
               echo "Bundled vocals: $song"
             else
               rm -f "assets/songs/$song/Voices.ogg"
               echo "No separate vocal track: $song"
             fi
             for chart in "$song.json" "$song-easy.json" "$song-hard.json" events.json; do
-              if curl -fsSL "$base/preload/data/$song/$chart" -o "assets/preload/data/$song/$chart"; then
+              if [[ -s "$base/preload/data/$song/$chart" ]] && cp "$base/preload/data/$song/$chart" "assets/preload/data/$song/$chart"; then
                 echo "Bundled chart: $song/$chart"
               else
                 rm -f "assets/preload/data/$song/$chart"
@@ -77,12 +79,12 @@ jobs:
             test -s "assets/songs/$song/Inst.ogg"
             test -s "assets/preload/data/$song/$song.json"
           done
-          curl -fsSL https://raw.githubusercontent.com/ShadowMario/FNF-PsychEngine/0.6.3/LICENSE -o assets/PsychEngine-LICENSE.txt
+          cp vendor/PsychEngine/LICENSE assets/PsychEngine-LICENSE.txt
           cat > assets/PsychEngine-ASSET-NOTICE.txt <<'EOF'
           Stock song audio and chart data are fetched at build time from
           ShadowMario/FNF-PsychEngine, tag 0.6.3.
           The upstream LICENSE is included as assets/PsychEngine-LICENSE.txt.
-          This PS4 port is an independent community project and is not official.
+          The native PS4 executable is currently a prototype and does not yet run the original Haxe/OpenFL runtime.
           EOF
           test -s assets/PsychEngine-LICENSE.txt
           echo "Stock song asset payload:"
