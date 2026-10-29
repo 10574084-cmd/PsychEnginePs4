@@ -24,8 +24,10 @@ jobs:
     name: Audit upstream engine and PS4 port
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout PS4 port repository
+      - name: Checkout PS4 port and pinned upstream source
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
 
       - name: Inspect source and generate honest port report
