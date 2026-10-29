@@ -160,6 +160,7 @@ constexpr const char *kSettingsDirectory = "/data/PSYH00001";
 constexpr const char *kSettingsPath = "/data/PSYH00001/menu_settings.cfg";
 constexpr int kOptionsCount = 5;
 constexpr const char *kSongDirectory = "/data/PSYH00001/songs";
+constexpr const char *kChartDirectory = "/data/PSYH00001/data";
 constexpr int kFreeplayVisibleRows = 7;
 
 struct InstalledSong {
@@ -171,6 +172,7 @@ struct InstalledSong {
     std::string chartPath;
     double bpm = 0.0;
     int noteCount = 0;
+    int difficultyCount = 0;
 };
 std::vector<InstalledSong> gInstalledSongs;
 
@@ -246,10 +248,26 @@ int countChartNoteEntries(const std::string &json) {
 
 void readSongChartMetadata(InstalledSong &song) {
     const std::string folderPath = std::string(kSongDirectory) + "/" + song.folder;
-    const std::string namedChart = folderPath + "/" + song.folder + ".json";
-    const std::string genericChart = folderPath + "/chart.json";
-    if (pathExists(namedChart)) song.chartPath = namedChart;
-    else if (pathExists(genericChart)) song.chartPath = genericChart;
+    const std::string dataPath = std::string(kChartDirectory) + "/" + song.folder;
+    const std::vector<std::string> candidates = {
+        folderPath + "/" + song.folder + ".json",
+        folderPath + "/chart.json",
+        dataPath + "/" + song.folder + ".json",
+        dataPath + "/chart.json",
+        dataPath + "/" + song.folder + "-normal.json",
+        dataPath + "/" + song.folder + "-easy.json",
+        dataPath + "/" + song.folder + "-hard.json",
+        folderPath + "/" + song.folder + "-normal.json",
+        folderPath + "/" + song.folder + "-easy.json",
+        folderPath + "/" + song.folder + "-hard.json"
+    };
+
+    for (const std::string &candidate : candidates) {
+        if (pathExists(candidate)) {
+            song.chartPath = candidate;
+            break;
+        }
+    }
     if (song.chartPath.empty()) {
         song.hasChart = false;
         return;
@@ -263,6 +281,19 @@ void readSongChartMetadata(InstalledSong &song) {
     song.hasChart = true;
     song.bpm = readJsonNumberForKey(json, "bpm");
     song.noteCount = countChartNoteEntries(json);
+
+    // Psych Engine commonly stores separate chart files for easy/normal/hard.
+    const std::string names[] = {
+        song.folder + "-easy.json",
+        song.folder + "-normal.json",
+        song.folder + "-hard.json"
+    };
+    for (const std::string &name : names) {
+        if (pathExists(dataPath + "/" + name) || pathExists(folderPath + "/" + name)) {
+            ++song.difficultyCount;
+        }
+    }
+    if (song.difficultyCount == 0) song.difficultyCount = 1;
 }
 
 std::string readableSongName(const std::string &folder) {
@@ -360,13 +391,16 @@ void drawFreeplayDetails(Scene2D *scene, Ps4Image &background, const InstalledSo
     drawCenteredText(scene, song.hasVoices ? "VOCAL TRACK DETECTED" : "NO VOCAL TRACK", 475, 4, muted);
     char bpmLine[48];
     char noteLine[48];
+    char difficultyLine[48];
     if (song.bpm > 0.0) snprintf(bpmLine, sizeof(bpmLine), "BPM %.0f", song.bpm);
     else snprintf(bpmLine, sizeof(bpmLine), "BPM UNKNOWN");
     snprintf(noteLine, sizeof(noteLine), "CHART NOTES %d", song.noteCount);
-    drawCenteredText(scene, bpmLine, 535, 4, white);
-    drawCenteredText(scene, noteLine, 585, 4, white);
-    drawCenteredText(scene, "FILES DETECTED BUT GAMEPLAY IS NOT READY", 660, 3, muted);
-    drawCenteredText(scene, "AUDIO AND NOTE PLAYBACK RUNTIME IS NEXT", 705, 3, muted);
+    snprintf(difficultyLine, sizeof(difficultyLine), "CHART DIFFICULTIES %d", song.difficultyCount);
+    drawCenteredText(scene, bpmLine, 515, 4, white);
+    drawCenteredText(scene, noteLine, 565, 4, white);
+    drawCenteredText(scene, difficultyLine, 615, 4, white);
+    drawCenteredText(scene, "FILES DETECTED BUT GAMEPLAY IS NOT READY", 680, 3, muted);
+    drawCenteredText(scene, "AUDIO AND NOTE PLAYBACK RUNTIME IS NEXT", 720, 3, muted);
     drawCenteredText(scene, "CIRCLE BACK TO SONG LIST", 805, 4, white);
 }
 
