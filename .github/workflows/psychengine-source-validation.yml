@@ -32,29 +32,32 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential git libvlc-dev libvlccore-dev libgl1-mesa-dev libasound2-dev
 
-      - name: Install upstream Haxe libraries
+      - name: Install upstream Haxe libraries (versions compatible with Psych Engine 0.6.3)
         working-directory: vendor/PsychEngine
         shell: bash
         run: |
           set -euo pipefail
           haxelib setup "$HOME/haxelib"
-          haxelib install hxcpp
-          haxelib install lime
-          haxelib install openfl
-          haxelib --never install flixel
+
+          # Psych Engine 0.6.3 is not compatible with the current Flixel/Lime/OpenFL releases.
+          # Pin the stack to the versions documented for this engine generation.
+          haxelib install hxcpp 4.2.1
+          haxelib install lime 8.0.1
+          haxelib install openfl 9.2.1
+          haxelib install flixel 5.2.2
           haxelib run lime setup flixel
           haxelib run lime setup
-          haxelib install flixel-tools
-          haxelib install flixel-ui
-          haxelib install flixel-addons
-          haxelib install tjson
-          haxelib install hxjsonast
-          haxelib install hxCodec
-          haxelib git linc_luajit https://github.com/nebulazorua/linc_luajit
-          haxelib install hscript
+          haxelib install flixel-tools 1.5.1
+          haxelib install flixel-ui 2.5.0
+          haxelib install flixel-addons 3.0.2
+          haxelib install tjson 1.4.0
+          haxelib install hxjsonast 1.1.0
+          haxelib install hxCodec 2.5.1
+          haxelib install hscript 2.5.0
+          haxelib git linc_luajit https://github.com/superpowers04/linc_luajit.git
           haxelib git hscript-ex https://github.com/ianharrigan/hscript-ex
-          haxelib git discord_rpc https://github.com/Aidan63/linc_discord-rpc
-          haxelib install hxcpp-debug-server
+          haxelib git discord_rpc https://github.com/Aidan63/linc-discord-rpc.git
+          haxelib install hxcpp-debug-server 1.2.4
           haxelib list
 
       - name: Compile actual Psych Engine source for Linux
