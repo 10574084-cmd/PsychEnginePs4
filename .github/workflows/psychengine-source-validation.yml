@@ -1,0 +1,85 @@
+name: Psych Engine source validation
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".gitmodules"
+      - "vendor/PsychEngine"
+      - ".github/workflows/psychengine-source-validation.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build-upstream-linux:
+    name: Compile the real Haxe/OpenFL game source (Linux validation)
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout project and pinned Psych Engine source
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Haxe used by Psych Engine 0.6.3
+        uses: krdlab/setup-haxe@master
+        with:
+          haxe-version: 4.2.5
+
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential git libvlc-dev libvlccore-dev libgl1-mesa-dev libasound2-dev
+
+      - name: Install upstream Haxe libraries
+        working-directory: vendor/PsychEngine
+        shell: bash
+        run: |
+          set -euo pipefail
+          haxelib setup "$HOME/haxelib"
+          haxelib install hxcpp
+          haxelib install lime
+          haxelib install openfl
+          haxelib --never install flixel
+          haxelib run lime setup flixel
+          haxelib run lime setup
+          haxelib install flixel-tools
+          haxelib install flixel-ui
+          haxelib install flixel-addons
+          haxelib install tjson
+          haxelib install hxjsonast
+          haxelib install hxCodec
+          haxelib git linc_luajit https://github.com/nebulazorua/linc_luajit
+          haxelib install hscript
+          haxelib git hscript-ex https://github.com/ianharrigan/hscript-ex
+          haxelib git discord_rpc https://github.com/Aidan63/linc_discord-rpc
+          haxelib install hxcpp-debug-server
+          haxelib list
+
+      - name: Compile actual Psych Engine source for Linux
+        working-directory: vendor/PsychEngine
+        shell: bash
+        run: |
+          set -euo pipefail
+          haxelib run lime build Project.xml linux --app-version="source-validation-${GITHUB_RUN_ID}"
+          test -d export/release/linux/bin
+          find export/release/linux/bin -maxdepth 2 -type f -printf '%p %s bytes\n' | head -100
+
+      - name: Upload source-built Linux binary for validation
+        uses: actions/upload-artifact@v4
+        with:
+          name: PsychEngine-source-linux-validation
+          path: vendor/PsychEngine/export/release/linux/bin/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Record PS4 limitation
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "This job compiles the pinned upstream Haxe source for Linux only."
+            echo "A successful Linux build is not a PS4 build."
+            echo "The PS4 target still needs an hxcpp toolchain target and a Lime/OpenFL native backend for OpenOrbis."
+          } >> "$GITHUB_STEP_SUMMARY"
