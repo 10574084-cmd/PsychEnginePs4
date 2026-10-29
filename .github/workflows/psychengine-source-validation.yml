@@ -32,6 +32,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential git libvlc-dev libvlccore-dev libgl1-mesa-dev libasound2-dev
 
+      - name: Cache Haxe libraries
+        uses: actions/cache@v4
+        with:
+          path: ~/haxelib
+          key: ${{ runner.os }}-haxe-4.2.5-psych063-${{ hashFiles('.github/workflows/psychengine-source-validation.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-haxe-4.2.5-psych063-
+
       - name: Install upstream Haxe libraries (versions compatible with Psych Engine 0.6.3)
         working-directory: vendor/PsychEngine
         shell: bash
@@ -39,35 +47,51 @@ jobs:
           set -euo pipefail
           haxelib setup "$HOME/haxelib"
 
-          # Psych Engine 0.6.3 is not compatible with the current Flixel/Lime/OpenFL releases.
-          # Pin the stack to the versions documented for this engine generation.
-          haxelib install hxcpp 4.2.1
-          haxelib install lime 8.0.1
-          haxelib install openfl 9.2.1
-          haxelib install flixel 4.11.0
-          haxelib install flixel-tools 1.5.1
-          haxelib install flixel-ui 2.4.0
-          haxelib install flixel-addons 2.11.0
-          haxelib install tjson 1.4.0
-          haxelib install hxjsonast 1.1.0
-          haxelib git hxCodec https://github.com/polybiusproxy/hxCodec.git
-          haxelib install hscript 2.5.0
-          haxelib git linc_luajit https://github.com/superpowers04/linc_luajit.git
-          haxelib git hscript-ex https://github.com/ianharrigan/hscript-ex
-          haxelib git discord_rpc https://github.com/Aidan63/linc_discord-rpc.git
-          haxelib install hxcpp-debug-server 1.2.4
+          # Suppress Haxelib's per-chunk progress output so CI logs do not balloon.
+          run_haxelib() {
+            local label="$1"
+            shift
+            local log_file="$RUNNER_TEMP/haxelib-${label//[^A-Za-z0-9_-]/_}.log"
+            echo "::group::${label}"
+            if timeout 600 "$@" >"$log_file" 2>&1; then
+              tail -n 12 "$log_file" || true
+            else
+              status=$?
+              echo "::error::${label} failed (exit $status)"
+              tail -n 100 "$log_file" || true
+              echo "::endgroup::"
+              return "$status"
+            fi
+            echo "::endgroup::"
+          }
 
-          # lime setup can install optional Flixel tools; force the engine-tested versions afterward.
-          haxelib set hxcpp 4.2.1
-          haxelib set lime 8.0.1
-          haxelib set openfl 9.2.1
-          haxelib set flixel 4.11.0
-          haxelib set flixel-tools 1.5.1
-          haxelib set flixel-ui 2.4.0
-          haxelib set flixel-addons 2.11.0
-          haxelib set hscript 2.5.0
-          haxelib set tjson 1.4.0
-          haxelib set hxjsonast 1.1.0
+          # Psych Engine 0.6.3 Main.hx uses the Flixel 4.x FlxGame constructor.
+          run_haxelib "install hxcpp 4.2.1" haxelib install hxcpp 4.2.1
+          run_haxelib "install lime 8.0.1" haxelib install lime 8.0.1
+          run_haxelib "install openfl 9.2.1" haxelib install openfl 9.2.1
+          run_haxelib "install flixel 4.11.0" haxelib install flixel 4.11.0
+          run_haxelib "install flixel-tools 1.5.1" haxelib install flixel-tools 1.5.1
+          run_haxelib "install flixel-ui 2.4.0" haxelib install flixel-ui 2.4.0
+          run_haxelib "install flixel-addons 2.11.0" haxelib install flixel-addons 2.11.0
+          run_haxelib "install tjson 1.4.0" haxelib install tjson 1.4.0
+          run_haxelib "install hxjsonast 1.1.0" haxelib install hxjsonast 1.1.0
+          run_haxelib "install hxCodec" haxelib git hxCodec https://github.com/polybiusproxy/hxCodec.git
+          run_haxelib "install hscript 2.5.0" haxelib install hscript 2.5.0
+          run_haxelib "install linc_luajit" haxelib git linc_luajit https://github.com/superpowers04/linc_luajit.git
+          run_haxelib "install hscript-ex" haxelib git hscript-ex https://github.com/ianharrigan/hscript-ex
+          run_haxelib "install discord_rpc" haxelib git discord_rpc https://github.com/Aidan63/linc-discord-rpc.git
+          run_haxelib "install hxcpp-debug-server 1.2.4" haxelib install hxcpp-debug-server 1.2.4
+
+          run_haxelib "activate hxcpp 4.2.1" haxelib set hxcpp 4.2.1
+          run_haxelib "activate lime 8.0.1" haxelib set lime 8.0.1
+          run_haxelib "activate openfl 9.2.1" haxelib set openfl 9.2.1
+          run_haxelib "activate flixel 4.11.0" haxelib set flixel 4.11.0
+          run_haxelib "activate flixel-tools 1.5.1" haxelib set flixel-tools 1.5.1
+          run_haxelib "activate flixel-ui 2.4.0" haxelib set flixel-ui 2.4.0
+          run_haxelib "activate flixel-addons 2.11.0" haxelib set flixel-addons 2.11.0
+          run_haxelib "activate hscript 2.5.0" haxelib set hscript 2.5.0
+          run_haxelib "activate tjson 1.4.0" haxelib set tjson 1.4.0
+          run_haxelib "activate hxjsonast 1.1.0" haxelib set hxjsonast 1.1.0
           haxelib list
 
       - name: Compile actual Psych Engine source for Linux
