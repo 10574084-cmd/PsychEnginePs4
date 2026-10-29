@@ -8,6 +8,8 @@ on:
       - '.github/workflows/ps4-build.yml'
       - 'README.md'
       - 'source/**'
+      - 'vendor/**'
+      - '.gitmodules'
       - 'assets/**'
       - 'Project.xml'
       - 'project.xml'
@@ -25,13 +27,6 @@ jobs:
       - name: Checkout PS4 port repository
         uses: actions/checkout@v4
 
-      - name: Checkout official Psych Engine source for compatibility audit
-        uses: actions/checkout@v4
-        with:
-          repository: ShadowMario/FNF-PsychEngine
-          ref: main
-          path: upstream-psychengine
-          persist-credentials: false
 
       - name: Inspect source and generate honest port report
         shell: bash
@@ -43,18 +38,18 @@ jobs:
             echo "Generated: $(date -u +'%Y-%m-%d %H:%M UTC')"
             echo
             echo "Upstream source: https://github.com/ShadowMario/FNF-PsychEngine"
-            echo "Upstream revision: $(git -C upstream-psychengine rev-parse HEAD)"
+            echo "Pinned submodule revision: $(git -C vendor/PsychEngine rev-parse HEAD)"
             echo
             echo "Project metadata:"
-            grep -E '<app |<window |<haxedef name="(LUA_ALLOWED|MODS_ALLOWED|VIDEOS_ALLOWED)' upstream-psychengine/Project.xml || true
+            grep -E '<app |<window |<haxedef name="(LUA_ALLOWED|MODS_ALLOWED|VIDEOS_ALLOWED)' vendor/PsychEngine/Project.xml || true
             echo
             echo "Available build/config files:"
-            find upstream-psychengine -maxdepth 2 -type f \( -name 'Project.xml' -o -name 'haxelib.json' -o -name 'Makefile' -o -name 'CMakeLists.txt' -o -name '*.yml' \) -not -path '*/.git/*' | sort | head -100
+            find vendor/PsychEngine -maxdepth 2 -type f \( -name 'Project.xml' -o -name 'haxelib.json' -o -name 'Makefile' -o -name 'CMakeLists.txt' -o -name '*.yml' \) -not -path '*/.git/*' | sort | head -100
             echo
             echo "PS4 port repository native entry points:"
             find . -maxdepth 4 -type f \( -name 'Makefile' -o -name 'CMakeLists.txt' -o -name 'main.cpp' -o -name '*.mk' \) -not -path './.git/*' | sort
             echo
-            if grep -Eiq 'if="ps4"|name="ps4"|target.*ps4' upstream-psychengine/Project.xml; then
+            if grep -Eiq 'if="ps4"|name="ps4"|target.*ps4' vendor/PsychEngine/Project.xml; then
               echo "A PS4 target marker was found in Project.xml; it still requires toolchain validation."
             else
               echo "BLOCKER: upstream Project.xml does not declare a PS4 target."
