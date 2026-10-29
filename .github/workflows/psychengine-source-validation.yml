@@ -79,7 +79,7 @@ jobs:
           run_haxelib "install hscript 2.5.0" haxelib install hscript 2.5.0
           run_haxelib "install linc_luajit" haxelib git linc_luajit https://github.com/superpowers04/linc_luajit.git
           run_haxelib "install hscript-ex" haxelib git hscript-ex https://github.com/ianharrigan/hscript-ex
-          run_haxelib "install discord_rpc" haxelib git discord_rpc https://github.com/Aidan63/linc-discord-rpc.git
+          run_haxelib "install discord_rpc" haxelib git discord_rpc https://github.com/Aidan63/linc_discord-rpc.git
           run_haxelib "install hxcpp-debug-server 1.2.4" haxelib install hxcpp-debug-server 1.2.4
 
           run_haxelib "activate hxcpp 4.2.1" haxelib set hxcpp 4.2.1
