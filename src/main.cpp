@@ -156,7 +156,7 @@ constexpr int kOptionsCount = 5;
 void loadMenuSettings() {
     FILE *file = fopen(kSettingsPath, "r");
     if (file == nullptr) {
-        printf("Menu settings: using defaults (no saved settings found).\\n");
+        printf("Menu settings: using defaults (no saved settings found).\n");
         return;
     }
 
@@ -171,9 +171,9 @@ void loadMenuSettings() {
         gMenuSettings.showVersionInfo = showVersionInfo != 0;
         gMenuSettings.showControlHints = showControlHints != 0;
         gMenuSettings.showMenuBackground = showMenuBackground != 0;
-        printf("Menu settings loaded.\\n");
+        printf("Menu settings loaded.\n");
     } else {
-        printf("Menu settings file is invalid; using defaults.\\n");
+        printf("Menu settings file is invalid; using defaults.\n");
     }
 }
 
@@ -181,16 +181,16 @@ void saveMenuSettings() {
     mkdir(kSettingsDirectory, 0777);
     FILE *file = fopen(kSettingsPath, "w");
     if (file == nullptr) {
-        printf("Could not save menu settings to %s.\\n", kSettingsPath);
+        printf("Could not save menu settings to %s.\n", kSettingsPath);
         return;
     }
 
-    fprintf(file, "%d %d %d\\n",
+    fprintf(file, "%d %d %d\n",
             gMenuSettings.showVersionInfo ? 1 : 0,
             gMenuSettings.showControlHints ? 1 : 0,
             gMenuSettings.showMenuBackground ? 1 : 0);
     fclose(file);
-    printf("Menu settings saved.\\n");
+    printf("Menu settings saved.\n");
 }
 
 void drawMainMenu(Scene2D *scene, Ps4Image &background, MenuOption *items,
@@ -225,7 +225,7 @@ void drawMainMenu(Scene2D *scene, Ps4Image &background, MenuOption *items,
     const int footerScale = 2;
 
     if (gMenuSettings.showVersionInfo) {
-        drawText(scene, "ECHO ENGINE BETA", 18, kScreenHeight - 94, footerScale, white);
+        drawText(scene, "PSYCH ENGINE PS4 BETA", 18, kScreenHeight - 94, footerScale, white);
         drawText(scene, "PSYCH ENGINE V0.6.3", 18, kScreenHeight - 66, footerScale, white);
         drawText(scene, "FRIDAY NIGHT FUNKIN V0.2", 18, kScreenHeight - 38, footerScale, white);
     }
@@ -281,7 +281,7 @@ void drawOptions(Scene2D *scene, Ps4Image &background, int selectedIndex) {
     const Color rowEdge = {70, 65, 82};
 
     drawPanel(scene, 300, 145, 1320, 790, panel, accent, 5);
-    drawCenteredText(scene, "ECHO ENGINE OPTIONS", 195, 8, white);
+    drawCenteredText(scene, "PSYCH ENGINE OPTIONS", 195, 8, white);
     drawCenteredText(scene, "NATIVE PS4 MENU SETTINGS", 265, 4, muted);
 
     char versionLine[64];

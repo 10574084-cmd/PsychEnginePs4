@@ -13,7 +13,7 @@ Experimental project investigating a native PlayStation 4 homebrew port of **Fri
 - `tools/patch_openorbis_graphics.py` adds fast alpha-aware image blitting to the OpenOrbis sample renderer, so transparent button art overlays the background correctly.
 - D-pad Up/Down changes the selected item; Cross opens a page and Circle returns to the main menu.
 - **Options is now an interactive native PS4 submenu**: toggle version labels, toggle controller hints, toggle the original background, and restore defaults. Preferences are saved to `/data/PSYH00001/menu_settings.cfg` when the console permits writes.
-- The main menu labels the project as Echo Engine BETA and identifies the Psych Engine 0.6.3 asset base.
+- The main menu labels the build as Psych Engine PS4 BETA and identifies the Psych Engine 0.6.3 asset base.
 - The native bootstrap Makefile links the OpenOrbis video, controller, and user-service libraries.
 - `.github/workflows/ps4-bootstrap.yml` fetches the matching original 0.6.3 menu assets, validates the icon, bundles runtime modules, and builds the experimental PKG.
 
