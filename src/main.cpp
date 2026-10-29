@@ -194,13 +194,13 @@ std::vector<InstalledSong> scanInstalledSongs() {
     mkdir(kSongDirectory, 0777);
     DIR *directory = opendir(kSongDirectory);
     if (!directory) {
-        printf("Freeplay: could not open %s\\n", kSongDirectory);
+        printf("Freeplay: could not open %s\n", kSongDirectory);
         return songs;
     }
     struct dirent *entry = nullptr;
     while ((entry = readdir(directory)) != nullptr && songs.size() < 128) {
         const char *name = entry->d_name;
-        if (!name || name[0] == '.' || name[0] == '\\0') continue;
+        if (!name || name[0] == '.' || name[0] == '\0') continue;
         const std::string folder(name);
         const std::string base = std::string(kSongDirectory) + "/" + folder;
         struct stat info;
@@ -217,7 +217,7 @@ std::vector<InstalledSong> scanInstalledSongs() {
     std::sort(songs.begin(), songs.end(), [](const InstalledSong &a, const InstalledSong &b) {
         return a.displayName < b.displayName;
     });
-    printf("Freeplay: found %u song folders.\\n", static_cast<unsigned>(songs.size()));
+    printf("Freeplay: found %u song folders.\n", static_cast<unsigned>(songs.size()));
     return songs;
 }
 
