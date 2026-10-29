@@ -11,6 +11,8 @@ OUT_ELF := $(INTDIR)/psychengine_ps4_bootstrap.elf
 OUT_OELF := $(INTDIR)/psychengine_ps4_bootstrap.oelf
 PKG := $(CONTENT_ID).pkg
 MENU_ASSETS := $(wildcard assets/psychmenu/*.png)
+SONG_ASSETS := $(wildcard assets/songs/*/*.ogg) $(wildcard assets/preload/data/*/*.json)
+ATTRIBUTION_ASSETS := assets/PsychEngine-LICENSE.txt assets/PsychEngine-ASSET-NOTICE.txt
 
 LIBS := -lc -lkernel -lc++ -lSceVideoOut -lScePad -lSceUserService -lSceAudioOut
 OBJS := $(INTDIR)/main.o $(INTDIR)/graphics.o $(INTDIR)/ps4png.o $(INTDIR)/audio_player.o $(INTDIR)/stb_vorbis.o
@@ -58,7 +60,7 @@ sce_sys/param.sfo: Makefile
 	$(PKGTOOLS)/PkgTool.Core sfo_setentry $@ TITLE_ID --type Utf8 --maxsize 12 --value '$(TITLE_ID)'
 	$(PKGTOOLS)/PkgTool.Core sfo_setentry $@ VERSION --type Utf8 --maxsize 8 --value '$(VERSION)'
 
-pkg.gp4: eboot.bin sce_sys/param.sfo sce_sys/icon0.png sce_sys/about/right.sprx sce_module/libc.prx sce_module/libSceFios2.prx $(MENU_ASSETS)
+pkg.gp4: eboot.bin sce_sys/param.sfo sce_sys/icon0.png sce_sys/about/right.sprx sce_module/libc.prx sce_module/libSceFios2.prx $(MENU_ASSETS) $(SONG_ASSETS) $(ATTRIBUTION_ASSETS)
 	python3 tools/make_gp4.py --out $@ --content-id $(CONTENT_ID) $^
 
 $(PKG): pkg.gp4

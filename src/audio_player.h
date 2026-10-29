@@ -14,7 +14,7 @@ public:
     AudioPlayer(const AudioPlayer &) = delete;
     AudioPlayer &operator=(const AudioPlayer &) = delete;
 
-    bool play(const std::string &oggPath);
+    bool play(const std::string &instrumentalPath, const std::string &voicesPath = std::string());
     void stop();
     bool isPlaying() const { return active_.load(); }
     const char *lastError() const { return lastError_.c_str(); }

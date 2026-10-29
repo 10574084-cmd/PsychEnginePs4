@@ -20,52 +20,80 @@ AudioPlayer::~AudioPlayer() {
     stop();
 }
 
-bool AudioPlayer::play(const std::string &oggPath) {
-    stop();
-    lastError_.clear();
-
-    int sourceChannels = 0;
-    int sourceRate = 0;
+namespace {
+bool decodeOggToStereo(const std::string &path, std::vector<int16_t> &output,
+                       std::string &error) {
+    int sourceChannels = 0, sourceRate = 0;
     short *decoded = nullptr;
-    const int sourceFrames = stb_vorbis_decode_filename(
-        oggPath.c_str(), &sourceChannels, &sourceRate, &decoded);
-
-    if (sourceFrames <= 0 || decoded == nullptr) {
-        if (decoded != nullptr) free(decoded);
-        lastError_ = "Could not decode OGG instrumental.";
+    const int sourceFrames = stb_vorbis_decode_filename(path.c_str(), &sourceChannels, &sourceRate, &decoded);
+    if (sourceFrames <= 0 || !decoded) {
+        if (decoded) free(decoded);
+        error = "Could not decode OGG file: " + path;
         return false;
     }
     if ((sourceChannels != 1 && sourceChannels != 2) || sourceRate < 8000 || sourceRate > 192000) {
         free(decoded);
-        lastError_ = "Unsupported OGG channel layout or sample rate.";
+        error = "Unsupported OGG channel layout or sample rate: " + path;
         return false;
     }
 
     const size_t inputFrames = static_cast<size_t>(sourceFrames);
     const size_t outputFrames = static_cast<size_t>(
         (static_cast<uint64_t>(inputFrames) * kOutputRate + sourceRate - 1) / sourceRate);
-    if (outputFrames == 0 || outputFrames > (static_cast<size_t>(kOutputRate) * 60 * 10)) {
+    if (outputFrames == 0 || outputFrames > static_cast<size_t>(kOutputRate) * 60 * 10) {
         free(decoded);
-        lastError_ = "OGG duration is invalid or exceeds the 10-minute preview limit.";
+        error = "OGG duration exceeds the 10-minute preview limit: " + path;
         return false;
     }
 
-    stereoPcm_.resize(outputFrames * kOutputChannels);
+    output.resize(outputFrames * 2);
     for (size_t i = 0; i < outputFrames; ++i) {
         const double sourcePosition = static_cast<double>(i) * sourceRate / kOutputRate;
         const size_t frameA = std::min(static_cast<size_t>(sourcePosition), inputFrames - 1);
         const size_t frameB = std::min(frameA + 1, inputFrames - 1);
         const double fraction = sourcePosition - static_cast<double>(frameA);
-        for (int channel = 0; channel < kOutputChannels; ++channel) {
+        for (int channel = 0; channel < 2; ++channel) {
             const int sourceChannel = sourceChannels == 1 ? 0 : channel;
             const int sampleA = decoded[frameA * static_cast<size_t>(sourceChannels) + sourceChannel];
             const int sampleB = decoded[frameB * static_cast<size_t>(sourceChannels) + sourceChannel];
-            const double mixed = sampleA + (sampleB - sampleA) * fraction;
-            const double clamped = std::max(-32768.0, std::min(32767.0, mixed));
-            stereoPcm_[i * 2 + static_cast<size_t>(channel)] = static_cast<int16_t>(std::lround(clamped));
+            const double sample = sampleA + (sampleB - sampleA) * fraction;
+            output[i * 2 + static_cast<size_t>(channel)] =
+                static_cast<int16_t>(std::lround(std::max(-32768.0, std::min(32767.0, sample))));
         }
     }
     free(decoded);
+    return true;
+}
+}
+
+bool AudioPlayer::play(const std::string &instrumentalPath, const std::string &voicesPath) {
+    stop();
+    lastError_.clear();
+
+    std::vector<int16_t> instrumental;
+    std::string error;
+    if (!decodeOggToStereo(instrumentalPath, instrumental, error)) {
+        lastError_ = error;
+        return false;
+    }
+
+    std::vector<int16_t> voices;
+    if (!voicesPath.empty()) {
+        std::string voicesError;
+        if (!decodeOggToStereo(voicesPath, voices, voicesError)) {
+            printf("Audio: %s\\n", voicesError.c_str());
+            voices.clear();
+        }
+    }
+
+    const size_t samples = std::max(instrumental.size(), voices.size());
+    stereoPcm_.resize(samples);
+    for (size_t i = 0; i < samples; ++i) {
+        const double instSample = i < instrumental.size() ? instrumental[i] * 0.72 : 0.0;
+        const double voiceSample = i < voices.size() ? voices[i] * 0.72 : 0.0;
+        stereoPcm_[i] = static_cast<int16_t>(
+            std::lround(std::max(-32768.0, std::min(32767.0, instSample + voiceSample))));
+    }
 
     if (!audioInitialized_) {
         const int initResult = sceAudioOutInit();
@@ -77,8 +105,7 @@ bool AudioPlayer::play(const std::string &oggPath) {
         audioInitialized_ = true;
     }
 
-    audioHandle_ = sceAudioOutOpen(
-        ORBIS_USER_SERVICE_USER_ID_SYSTEM,
+    audioHandle_ = sceAudioOutOpen(ORBIS_USER_SERVICE_USER_ID_SYSTEM,
         ORBIS_AUDIO_OUT_PORT_TYPE_MAIN, 0, kAudioBlockFrames,
         kOutputRate, ORBIS_AUDIO_OUT_PARAM_FORMAT_S16_STEREO);
     if (audioHandle_ <= 0) {

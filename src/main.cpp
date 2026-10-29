@@ -165,6 +165,8 @@ constexpr const char *kSettingsPath = "/data/PSYH00001/menu_settings.cfg";
 constexpr int kOptionsCount = 5;
 constexpr const char *kSongDirectory = "/data/PSYH00001/songs";
 constexpr const char *kChartDirectory = "/data/PSYH00001/data";
+constexpr const char *kBundledSongDirectory = "/app0/assets/songs";
+constexpr const char *kBundledChartDirectory = "/app0/assets/preload/data";
 constexpr int kFreeplayVisibleRows = 7;
 
 struct ChartNote {
@@ -178,7 +180,10 @@ struct ChartNote {
 struct InstalledSong {
     std::string folder;
     std::string displayName;
+    std::string audioDirectory;
+    std::string chartDirectory;
     std::string instrumentalPath;
+    std::string voicesPath;
     bool hasChart = false;
     bool hasInstrumental = false;
     bool hasVoices = false;
@@ -393,8 +398,8 @@ void loadSelectedChartMetadata(InstalledSong &song) {
 }
 
 void readSongChartMetadata(InstalledSong &song) {
-    const std::string folderPath = std::string(kSongDirectory) + "/" + song.folder;
-    const std::string dataPath = std::string(kChartDirectory) + "/" + song.folder;
+    const std::string folderPath = song.audioDirectory;
+    const std::string dataPath = song.chartDirectory;
     song.defaultChartPath = firstExistingPath({
         folderPath + "/" + song.folder + ".json",
         folderPath + "/chart.json",
@@ -468,37 +473,58 @@ std::string readableSongName(const std::string &folder) {
     return result.empty() ? "UNTITLED SONG" : result;
 }
 
+void appendSongsFromRoot(std::vector<InstalledSong> &songs,
+                         const std::string &songRoot,
+                         const std::string &chartRoot) {
+    DIR *directory = opendir(songRoot.c_str());
+    if (!directory) {
+        printf("Freeplay: song root not available: %s\\n", songRoot.c_str());
+        return;
+    }
+
+    struct dirent *entry = nullptr;
+    while ((entry = readdir(directory)) != nullptr && songs.size() < 128) {
+        const char *name = entry->d_name;
+        if (!name || name[0] == '.' || name[0] == '\\0') continue;
+        const std::string folder(name);
+        const auto existing = std::find_if(songs.begin(), songs.end(),
+            [&folder](const InstalledSong &song) { return song.folder == folder; });
+        if (existing != songs.end()) continue;
+
+        const std::string base = songRoot + "/" + folder;
+        struct stat info;
+        if (stat(base.c_str(), &info) != 0 || !S_ISDIR(info.st_mode)) continue;
+
+        InstalledSong song;
+        song.folder = folder;
+        song.displayName = readableSongName(folder);
+        song.audioDirectory = base;
+        song.chartDirectory = chartRoot + "/" + folder;
+        readSongChartMetadata(song);
+        song.instrumentalPath = firstExistingPath({base + "/Inst.ogg", base + "/inst.ogg"});
+        song.voicesPath = firstExistingPath({base + "/Voices.ogg", base + "/voices.ogg"});
+        song.hasInstrumental = !song.instrumentalPath.empty();
+        song.hasVoices = !song.voicesPath.empty();
+        if (!song.hasInstrumental && !song.hasChart) continue;
+        songs.push_back(song);
+    }
+    closedir(directory);
+}
+
 std::vector<InstalledSong> scanInstalledSongs() {
     std::vector<InstalledSong> songs;
     mkdir(kSettingsDirectory, 0777);
     mkdir(kSongDirectory, 0777);
-    DIR *directory = opendir(kSongDirectory);
-    if (!directory) {
-        printf("Freeplay: could not open %s\n", kSongDirectory);
-        return songs;
-    }
-    struct dirent *entry = nullptr;
-    while ((entry = readdir(directory)) != nullptr && songs.size() < 128) {
-        const char *name = entry->d_name;
-        if (!name || name[0] == '.' || name[0] == '\0') continue;
-        const std::string folder(name);
-        const std::string base = std::string(kSongDirectory) + "/" + folder;
-        struct stat info;
-        if (stat(base.c_str(), &info) != 0 || !S_ISDIR(info.st_mode)) continue;
-        InstalledSong song;
-        song.folder = folder;
-        song.displayName = readableSongName(folder);
-        readSongChartMetadata(song);
-        song.instrumentalPath = firstExistingPath({base + "/Inst.ogg", base + "/inst.ogg"});
-        song.hasInstrumental = !song.instrumentalPath.empty();
-        song.hasVoices = pathExists(base + "/Voices.ogg") || pathExists(base + "/voices.ogg");
-        songs.push_back(song);
-    }
-    closedir(directory);
+
+    // Custom songs are scanned first and override bundled songs with the same folder name.
+    appendSongsFromRoot(songs, kSongDirectory, kChartDirectory);
+    appendSongsFromRoot(songs, kBundledSongDirectory, kBundledChartDirectory);
+
     std::sort(songs.begin(), songs.end(), [](const InstalledSong &a, const InstalledSong &b) {
         return a.displayName < b.displayName;
     });
-    printf("Freeplay: found %u song folders.\n", static_cast<unsigned>(songs.size()));
+    printf("Freeplay: found %u song folders (bundled + custom).\\n",
+           static_cast<unsigned>(songs.size()));
     return songs;
 }
 
@@ -510,12 +536,12 @@ void drawFreeplay(Scene2D *scene, Ps4Image &background, int selectedIndex) {
     const Color rowFill = {32, 29, 43}, rowEdge = {70, 65, 82};
     drawPanel(scene, 220, 85, 1480, 910, panel, accent, 5);
     drawCenteredText(scene, "FREEPLAY", 125, 9, white);
-    drawCenteredText(scene, "CUSTOM SONG FILE BROWSER", 205, 4, muted);
+    drawCenteredText(scene, "FNF STOCK SONGS + CUSTOM SONGS", 205, 4, muted);
     if (gInstalledSongs.empty()) {
-        drawCenteredText(scene, "NO SONG FOLDERS FOUND", 395, 6, white);
-        drawCenteredText(scene, "ADD SONG FOLDERS TO DATA PSYH00001 SONGS", 500, 3, muted);
-        drawCenteredText(scene, "EACH FOLDER NEEDS A CHART JSON FILE", 555, 3, muted);
-        drawCenteredText(scene, "INST OGG IS REQUIRED FOR FUTURE PLAYBACK", 610, 3, muted);
+        drawCenteredText(scene, "NO SONGS FOUND", 395, 6, white);
+        drawCenteredText(scene, "BUILT-IN FNF SONGS SHOULD SHIP WITH THE PKG", 500, 3, muted);
+        drawCenteredText(scene, "CUSTOM SONGS: DATA PSYH00001 SONGS", 555, 3, muted);
+        drawCenteredText(scene, "SONGS NEED AN OGG INSTRUMENTAL AND CHART", 610, 3, muted);
         drawCenteredText(scene, "PRESS CIRCLE TO RETURN", 865, 4, white);
         return;
     }
@@ -668,7 +694,7 @@ void startGameplay(InstalledSong &song) {
     gGameplay.score = 0;
     gGameplay.hits = 0;
     gGameplay.misses = 0;
-    if (song.hasInstrumental && !gAudioPlayer.play(song.instrumentalPath))
+    if (song.hasInstrumental && !gAudioPlayer.play(song.instrumentalPath, song.voicesPath))
         printf("Gameplay audio unavailable: %s\\n", gAudioPlayer.lastError());
     gGameplay.startedAt = std::chrono::steady_clock::now();
 }
@@ -966,7 +992,7 @@ int main() {
                 if (pressed & ORBIS_PAD_BUTTON_RIGHT) changeSongDifficulty(song, 1);
                 if (pressed & ORBIS_PAD_BUTTON_TRIANGLE) {
                     if (song.hasInstrumental) {
-                        if (!gAudioPlayer.play(song.instrumentalPath))
+                        if (!gAudioPlayer.play(song.instrumentalPath, song.voicesPath))
                             printf("Audio preview failed: %s\\n", gAudioPlayer.lastError());
                     } else {
                         gInstalledSongs = scanInstalledSongs();
@@ -979,7 +1005,7 @@ int main() {
                         startGameplay(song);
                         page = SubPage::Gameplay;
                     } else if (song.hasInstrumental &&
-                               !gAudioPlayer.play(song.instrumentalPath)) {
+                               !gAudioPlayer.play(song.instrumentalPath, song.voicesPath)) {
                         printf("Audio preview failed: %s\\n", gAudioPlayer.lastError());
                     }
                 }
