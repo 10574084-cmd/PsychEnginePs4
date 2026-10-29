@@ -82,6 +82,16 @@ jobs:
           run_haxelib "install discord_rpc" haxelib git discord_rpc https://github.com/Aidan63/linc_discord-rpc.git
           run_haxelib "install hxcpp-debug-server 1.2.4" haxelib install hxcpp-debug-server 1.2.4
 
+          # Some git-installed Haxelib packages ship native code as Git submodules.
+          for name in discord_rpc linc_luajit hxCodec hscript-ex; do
+            repo="$HOME/haxelib/$name/git"
+            if [[ -d "$repo/.git" && -f "$repo/.gitmodules" ]]; then
+              echo "::group::Initialize native submodules for $name"
+              git -C "$repo" submodule update --init --recursive
+              echo "::endgroup::"
+            fi
+          done
+
           run_haxelib "activate hxcpp 4.2.1" haxelib set hxcpp 4.2.1
           run_haxelib "activate lime 8.0.1" haxelib set lime 8.0.1
           run_haxelib "activate openfl 9.2.1" haxelib set openfl 9.2.1
