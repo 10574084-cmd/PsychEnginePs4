@@ -190,7 +190,7 @@ std::string readTextFile(const std::string &path) {
         fclose(file);
         return std::string();
     }
-    std::string result(static_cast<size_t>(length), '\\0');
+    std::string result(static_cast<size_t>(length), char(0));
     const size_t read = fread(&result[0], 1, result.size(), file);
     fclose(file);
     result.resize(read);
@@ -198,20 +198,20 @@ std::string readTextFile(const std::string &path) {
 }
 
 double readJsonNumberForKey(const std::string &json, const char *key) {
-    const std::string token = std::string("\\\"") + key + "\\\"";
+    const std::string token = std::string(1, char(34)) + key + std::string(1, char(34));
     const size_t keyAt = json.find(token);
     if (keyAt == std::string::npos) return 0.0;
     const size_t colon = json.find(':', keyAt + token.size());
     if (colon == std::string::npos) return 0.0;
     const char *begin = json.c_str() + colon + 1;
-    while (*begin == ' ' || *begin == '\\t' || *begin == '\\r' || *begin == '\\n') ++begin;
+    while (std::isspace(static_cast<unsigned char>(*begin))) ++begin;
     char *end = nullptr;
     const double value = strtod(begin, &end);
     return end == begin || value < 0.0 ? 0.0 : value;
 }
 
 int countChartNoteEntries(const std::string &json) {
-    const std::string token = "\\\"sectionNotes\\\"";
+    const std::string token = std::string(1, char(34)) + "sectionNotes" + std::string(1, char(34));
     const size_t keyAt = json.find(token);
     if (keyAt == std::string::npos) return 0;
     const size_t colon = json.find(':', keyAt + token.size());
@@ -227,7 +227,7 @@ int countChartNoteEntries(const std::string &json) {
         const char ch = json[i];
         if (inString) {
             if (escaped) escaped = false;
-            else if (ch == '\\\\') escaped = true;
+            else if (static_cast<unsigned char>(ch) == 92) escaped = true;
             else if (ch == '"') inString = false;
             continue;
         }
