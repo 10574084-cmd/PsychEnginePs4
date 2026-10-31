@@ -1,0 +1,65 @@
+<xml>
+  <!-- OpenOrbis cross-compiler configuration for Haxe hxcpp. -->
+  <set name="noM32" value="1" />
+  <set name="noM64" value="1" />
+  <set name="NO_PRECOMPILED_HEADERS" value="1" />
+  <set name="HXCPP_AR" value="llvm-ar" />
+  <set name="HXCPP_RANLIB" value="llvm-ranlib" />
+
+  <include name="gcc-toolchain.xml" />
+
+  <compiler id="orbis" exe="clang++" if="orbis">
+    <flag value="--target=x86_64-pc-freebsd12-elf" />
+    <flag value="-isysroot" />
+    <flag value="${OO_PS4_TOOLCHAIN}" />
+    <flag value="-isystem" />
+    <flag value="${OO_PS4_TOOLCHAIN}/include" />
+    <flag value="-isystem" />
+    <flag value="${OO_PS4_TOOLCHAIN}/include/c++/v1" />
+    <flag value="-I${HXCPP}/include" />
+    <flag value="-D__ORBIS__" />
+    <flag value="-fPIC" />
+    <flag value="-funwind-tables" />
+    <flag value="-fvisibility=hidden" />
+    <flag value="-Wno-invalid-offsetof" />
+    <flag value="-Wno-overflow" />
+    <flag value="-O2" unless="debug" />
+    <flag value="-g" if="debug" />
+    <cppflag value="-frtti" />
+    <cppflag value="-std=c++11" />
+    <include name="common-defines.xml" />
+    <flag value="-c" />
+    <outflag value="-o" />
+    <objdir value="./obj/orbis/" />
+    <ext value=".o" />
+  </compiler>
+
+  <linker id="exe" exe="ld.lld" if="orbis">
+    <flag value="-m" />
+    <flag value="elf_x86_64" />
+    <flag value="-pie" />
+    <flag value="--script" />
+    <flag value="${OO_PS4_TOOLCHAIN}/link.x" />
+    <flag value="--eh-frame-hdr" />
+    <flag value="-L${OO_PS4_TOOLCHAIN}/lib" />
+    <lib name="-lc" />
+    <lib name="-lkernel" />
+    <lib name="-lc++" />
+    <lib name="-lpthread" />
+    <lib name="${OO_PS4_TOOLCHAIN}/lib/crt1.o" />
+    <ext value="" />
+    <outflag value="-o" />
+  </linker>
+
+  <linker id="dll" exe="ld.lld" if="orbis">
+    <flag value="-m" />
+    <flag value="elf_x86_64" />
+    <flag value="-shared" />
+    <flag value="-L${OO_PS4_TOOLCHAIN}/lib" />
+    <lib name="-lc" />
+    <lib name="-lkernel" />
+    <lib name="-lc++" />
+    <ext value=".so" />
+    <outflag value="-o" />
+  </linker>
+</xml>
