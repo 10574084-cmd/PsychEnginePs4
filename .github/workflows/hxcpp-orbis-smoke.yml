@@ -56,6 +56,7 @@ jobs:
           set -euo pipefail
           hxcpp_root="$(haxelib path hxcpp | head -n 1)"
           test -f "$hxcpp_root/toolchain/haxe-target.xml"
+          python3 tools/hxcpp/patch_hxcpp_orbis.py "$hxcpp_root"
           cp tools/hxcpp/orbis-toolchain.xml "$hxcpp_root/toolchain/orbis-toolchain.xml"
           echo "Installed custom hxcpp toolchain at $hxcpp_root/toolchain/orbis-toolchain.xml"
           command -v clang++
