@@ -19,6 +19,7 @@
     <flag value="-I${HXCPP}/include" />
     <flag value="-D__ORBIS__" />
     <flag value="-D_POSIX_C_SOURCE=200809L" />
+    <flag value="-DUSE_TIME_R" />
     <flag value="-fPIC" />
     <flag value="-funwind-tables" />
     <flag value="-fvisibility=hidden" />
