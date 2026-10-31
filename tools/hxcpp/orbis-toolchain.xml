@@ -18,6 +18,7 @@
     <flag value="${OO_PS4_TOOLCHAIN}/include/c++/v1" />
     <flag value="-I${HXCPP}/include" />
     <flag value="-D__ORBIS__" />
+    <flag value="-D_POSIX_C_SOURCE=200809L" />
     <flag value="-fPIC" />
     <flag value="-funwind-tables" />
     <flag value="-fvisibility=hidden" />
